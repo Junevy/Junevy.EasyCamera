@@ -1,5 +1,5 @@
 using Junevy.EasyCamera.Core.Abstractions;
-using Junevy.EasyCamera.Core.Common;
+using Junevy.EasyCamera.Common;
 using Junevy.EasyCamera.Tests.Mocks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;

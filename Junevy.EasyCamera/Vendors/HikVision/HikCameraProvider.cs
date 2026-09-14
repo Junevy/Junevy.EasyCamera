@@ -1,5 +1,5 @@
 using Junevy.EasyCamera.Core.Abstractions;
-using Junevy.EasyCamera.Core.Common;
+using Junevy.EasyCamera.Common;
 using MvCameraControl;
 using System;
 using System.Collections.Generic;
@@ -124,14 +124,20 @@ namespace Junevy.EasyCamera.Vendors.HikVision
                                   | DeviceTLayerType.MvGenTLCXPDevice
                                   | DeviceTLayerType.MvGenTLXoFDevice,
 
-                // ALL/Unknown：必须覆盖上面所有具体类型，否则 Enumerate(ALL) 与 Enumerate(具体类型)
-                // 的结果集合不一致（历史上漏掉了 MvCameraLinkDevice）
-                _ => DeviceTLayerType.MvGigEDevice
-                     | DeviceTLayerType.MvUsbDevice
-                     | DeviceTLayerType.MvCameraLinkDevice
-                     | DeviceTLayerType.MvGenTLCXPDevice
-                     | DeviceTLayerType.MvGenTLCameraLinkDevice
-                     | DeviceTLayerType.MvGenTLXoFDevice
+                // ALL 必须覆盖 SDK 支持的所有设备传输层。
+                CameraType.ALL => DeviceTLayerType.MvGigEDevice
+                               | DeviceTLayerType.MvUsbDevice
+                               | DeviceTLayerType.MvCameraLinkDevice
+                               | DeviceTLayerType.MvVirGigEDevice
+                               | DeviceTLayerType.MvVirUsbDevice
+                               | DeviceTLayerType.MvGenTLGigEDevice
+                               | DeviceTLayerType.MvGenTLCameraLinkDevice
+                               | DeviceTLayerType.MvGenTLCXPDevice
+                               | DeviceTLayerType.MvGenTLXoFDevice,
+
+                // Unknown 代表调用方没有指定有效类型，不能扩大为 ALL。
+                CameraType.Unknown => (DeviceTLayerType)0,
+                _ => (DeviceTLayerType)0,
             };
         }
     }

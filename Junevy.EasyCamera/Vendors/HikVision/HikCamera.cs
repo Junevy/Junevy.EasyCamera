@@ -10,6 +10,10 @@ namespace Junevy.EasyCamera.Vendors.HikVision
     /// </summary>
     public class HikCamera : ICamera
     {
+        private readonly object locker = new();
+        private readonly SemaphoreSlim operationGate = new(1, 1);
+        private readonly Func<IDeviceInfo, IDevice> deviceFactory;
+
         /// <summary>
         /// 海康原生设备信息
         /// </summary>
@@ -24,6 +28,12 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// 海康相机设备实例
         /// </summary>
         private IDevice device;
+
+        /// <summary>
+        /// 设备对应的取流器。回调归还缓冲区时使用捕获的取流器，
+        /// 不依赖 Dispose 后被清空的 device 字段。
+        /// </summary>
+        private IStreamGrabber streamGrabber;
 
         /// <summary>
         /// 相机内部图像缓冲区数量，0表示使用SDK默认值
@@ -46,14 +56,40 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         private int disposed;
 
         /// <summary>
+        /// 已进入回调但尚未完成归还缓冲区的数量。
+        /// </summary>
+        private int inFlightCallbacks;
+
+        private readonly ManualResetEventSlim callbacksDrained = new(true);
+        private bool callbacksEnabled;
+        private bool closing;
+        private string lastError;
+
+        /// <summary>
         /// 是否已打开
         /// </summary>
-        public bool IsOpen => Volatile.Read(ref this.isOpen) == 1 && this.device != null && this.device.IsConnected;
+        public bool IsConnected
+            => Volatile.Read(ref this.isOpen) == 1
+            && this.device != null
+            && this.device.IsConnected;
+
+        /// <summary>
+        /// 最近一次无法通过返回值表达的生命周期错误（例如 StopGrab 失败）。
+        /// </summary>
+        public string LastError
+        {
+            get
+            {
+                lock (this.locker)
+                    return this.lastError;
+            }
+        }
 
         /// <summary>
         /// 是否正在取流
         /// </summary>
-        public bool IsGrabbing => Volatile.Read(ref this.isGrabbing) == 1;
+        public bool IsGrabbing
+            => Volatile.Read(ref this.isGrabbing) == 1;
 
         /// <summary>
         /// 构造海康工业相机
@@ -64,9 +100,21 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// <c>info</c> 或 <c>stream</c> 为 <c>null</c>
         /// </exception>
         public HikCamera(IDeviceInfo info, ICameraStream stream)
+            : this(info, stream, DeviceFactory.CreateDevice)
+        {
+        }
+
+        /// <summary>
+        /// 构造带设备创建 seam 的海康相机，避免生命周期测试依赖真实硬件。
+        /// </summary>
+        /// <param name="info">海康原生设备信息</param>
+        /// <param name="stream">相机帧数据流</param>
+        /// <param name="deviceFactory">设备创建委托</param>
+        public HikCamera(IDeviceInfo info, ICameraStream stream, Func<IDeviceInfo, IDevice> deviceFactory)
         {
             this.deviceInfo = info ?? throw new ArgumentNullException(nameof(info));
             this.stream = stream ?? throw new ArgumentNullException(nameof(stream));
+            this.deviceFactory = deviceFactory ?? throw new ArgumentNullException(nameof(deviceFactory));
         }
 
         /// <summary>
@@ -75,47 +123,95 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// <returns>
         /// 相机操作结果
         /// </returns>
-        public CameraResult Open()
+        public CameraResult Connect()
         {
-            if (Volatile.Read(ref this.disposed) == 1)
-                return CameraResult.Fail(-1, "The camera has been disposed");
-
-            if (this.IsOpen)
-                return CameraResult.Fail(-1, "The camera has been opened");
-
+            this.operationGate.Wait();
             try
             {
-                if (this.device == null)
+                IDevice currentDevice;
+                IStreamGrabber currentGrabber;
+                lock (this.locker)
                 {
-                    this.device = DeviceFactory.CreateDevice(this.deviceInfo);
+                    if (this.disposed == 1)
+                        return CameraResult.Fail(-1, "The camera has been disposed");
+                    if (this.IsConnected)
+                        return CameraResult.Fail(-1, "The camera has been opened");
+
+                    this.device ??= this.deviceFactory(this.deviceInfo);
+                    currentDevice = this.device;
                 }
 
-                var result = this.device.Open();
-
+                var result = currentDevice.Open();
                 if (result != MvError.MV_OK)
+                {
+                    this.SetLastError($"Open camera failed with error code {result}.");
                     return CameraResult.Fail(result, "Open camera failed");
+                }
 
-                // 先解绑再绑定，避免重复打开时回调被注册多次
-                this.device.StreamGrabber.FrameGrabedEvent -= this.ProcessFrameCallBack;
-                this.device.StreamGrabber.FrameGrabedEvent += this.ProcessFrameCallBack;
+                currentGrabber = currentDevice.StreamGrabber;
+                if (currentGrabber == null)
+                {
+                    currentDevice.Close();
+                    this.SetLastError("Open camera failed because the stream grabber is null.");
+                    return CameraResult.Fail(-1, "Open camera failed");
+                }
 
-                // 设备打开成功即置位，避免后续可选配置失败时状态位与设备真实状态不一致
-                Interlocked.Exchange(ref this.isOpen, 1);
+                lock (this.locker)
+                {
+                    this.streamGrabber = currentGrabber;
+                    this.isOpen = 1;
+                    this.closing = false;
+                    this.callbacksEnabled = true;
+                }
 
-                // 延迟应用缓冲区配置：必须在设备打开之后、开始取流之前。
-                // 该配置为可选优化项，失败不影响相机可用性
-                if (this.bufferCount > 0)
-                    this.TryApplyBufferCount();
+                try
+                {
+                    // 先解绑再绑定，避免重复打开时回调被注册多次。
+                    currentGrabber.FrameGrabedEvent -= this.ProcessFrameCallBack;
+                    currentGrabber.FrameGrabedEvent += this.ProcessFrameCallBack;
 
-                return CameraResult.Success(result);
+                    // 延迟应用缓冲区配置：必须在设备打开之后、开始取流之前。
+                    // 该配置为可选优化项，失败不影响相机可用性。
+                    if (this.bufferCount > 0)
+                        this.TryApplyBufferCount();
+
+                    this.SetLastError(null);
+                    return CameraResult.Success(result);
+                }
+                catch (Exception e)
+                {
+                    lock (this.locker)
+                    {
+                        this.callbacksEnabled = false;
+                        this.isOpen = 0;
+                    }
+
+                    try
+                    {
+                        currentGrabber.FrameGrabedEvent -= this.ProcessFrameCallBack;
+                        currentDevice.Close();
+                    }
+                    catch
+                    {
+                    }
+
+                    this.SetLastError(e.Message);
+                    return CameraResult.Fail(-1, e.Message);
+                }
             }
-            catch (MvException me)
+            catch (MvException mve)
             {
-                return CameraResult.Fail(me.ErrorCode, me.Message);
+                this.SetLastError(mve.Message);
+                return CameraResult.Fail(mve.ErrorCode, mve.Message);
             }
             catch (Exception e)
             {
+                this.SetLastError(e.Message);
                 return CameraResult.Fail(-1, e.Message);
+            }
+            finally
+            {
+                this.operationGate.Release();
             }
         }
 
@@ -127,27 +223,87 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// </returns>
         public CameraResult Close()
         {
-            if (this.device == null)
-                return CameraResult.Fail(-1, "Camera not initialized");
-
-            this.StopGrab();
-
+            this.operationGate.Wait();
             try
             {
-                this.device.StreamGrabber.FrameGrabedEvent -= this.ProcessFrameCallBack;
+                IDevice currentDevice;
+                IStreamGrabber currentGrabber;
+                lock (this.locker)
+                {
+                    if (this.disposed == 1)
+                        return CameraResult.Fail(-1, "Camera has been disposed");
 
-                var result = this.device.Close();
-                Interlocked.Exchange(ref this.isOpen, 0);
+                    currentDevice = this.device;
+                    currentGrabber = this.streamGrabber ?? currentDevice?.StreamGrabber;
+                    if (currentDevice == null)
+                        return CameraResult.Fail(-1, "Camera not initialized");
 
-                return CameraResult.Result(result == MvError.MV_OK, result);
+                    this.closing = true;
+                    this.callbacksEnabled = false;
+                }
+
+                try
+                {
+                    if (currentGrabber != null)
+                        currentGrabber.FrameGrabedEvent -= this.ProcessFrameCallBack;
+                }
+                catch (Exception freeError)
+                {
+                    this.SetLastError(freeError.Message);
+                }
+
+                var stopResult = this.StopGrabCore(currentGrabber);
+                if (!stopResult.IsSuccess)
+                {
+                    this.RestoreCallbackSubscription(currentGrabber);
+                    lock (this.locker)
+                    {
+                        this.closing = false;
+                        this.callbacksEnabled = true;
+                    }
+
+                    return stopResult;
+                }
+
+                this.WaitForCallbacks();
+
+                var closeCode = currentDevice.Close();
+                if (closeCode != MvError.MV_OK)
+                {
+                    this.SetLastError($"Close camera failed with error code {closeCode}.");
+                    this.RestoreCallbackSubscription(currentGrabber);
+                    lock (this.locker)
+                    {
+                        this.closing = false;
+                        this.callbacksEnabled = true;
+                    }
+
+                    return CameraResult.Fail(closeCode, "Close camera failed");
+                }
+
+                lock (this.locker)
+                {
+                    this.isOpen = 0;
+                    this.isGrabbing = 0;
+                    this.callbacksEnabled = false;
+                    this.closing = false;
+                }
+                this.SetLastError(null);
+                return CameraResult.Success(closeCode);
             }
             catch (MvException me)
             {
+                this.SetLastError(me.Message);
                 return CameraResult.Fail(me.ErrorCode, me.Message);
             }
             catch (Exception e)
             {
+                this.SetLastError(e.Message);
                 return CameraResult.Fail(-1, e.Message);
+            }
+            finally
+            {
+                this.operationGate.Release();
             }
         }
 
@@ -157,36 +313,52 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// <returns>
         /// 相机操作结果
         /// </returns>
-        public CameraResult Grab()
+        public CameraResult StartGrab()
         {
-            if (!this.IsOpen)
-                return CameraResult.Fail(-1, "Camera is not open");
-
-            // 由取流状态位保证并发调用只有一个线程能真正启动取流
-            if (Interlocked.CompareExchange(ref this.isGrabbing, 1, 0) == 1)
-                return CameraResult.Fail(-1, "Camera is already grabbing");
-
+            this.operationGate.Wait();
             try
             {
-                var result = this.device.StreamGrabber.StartGrabbing();
+                IStreamGrabber currentGrabber;
+                lock (this.locker)
+                {
+                    if (this.disposed == 1)
+                        return CameraResult.Fail(-1, "The camera has been disposed");
+                    if (!this.IsConnected)
+                        return CameraResult.Fail(-1, "Camera is not open");
+                    if (Volatile.Read(ref this.isGrabbing) == 1)
+                        return CameraResult.Fail(-1, "Camera is already grabbing");
+
+                    currentGrabber = this.streamGrabber ?? this.device?.StreamGrabber;
+                }
+
+                if (currentGrabber == null)
+                    return CameraResult.Fail(-1, "Camera stream grabber is not initialized");
+
+                var result = currentGrabber.StartGrabbing();
 
                 if (result != MvError.MV_OK)
                 {
-                    Interlocked.Exchange(ref this.isGrabbing, 0);
+                    this.SetLastError($"Start grabbing failed with error code {result}.");
                     return CameraResult.Fail(result, "Start grabbing failed");
                 }
 
+                Interlocked.Exchange(ref this.isGrabbing, 1);
+                this.SetLastError(null);
                 return CameraResult.Result(true, result);
             }
             catch (MvException me)
             {
-                Interlocked.Exchange(ref this.isGrabbing, 0);
+                this.SetLastError(me.Message);
                 return CameraResult.Fail(me.ErrorCode, me.Message);
             }
             catch (Exception e)
             {
-                Interlocked.Exchange(ref this.isGrabbing, 0);
+                this.SetLastError(e.Message);
                 return CameraResult.Fail(-1, e.Message);
+            }
+            finally
+            {
+                this.operationGate.Release();
             }
         }
 
@@ -195,23 +367,68 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// </summary>
         public void StopGrab()
         {
-            // 状态位由1翻转为0的线程负责真正停止取流
-            if (Interlocked.CompareExchange(ref this.isGrabbing, 0, 1) != 1)
-                return;
+            this.operationGate.Wait();
+            try
+            {
+                IStreamGrabber currentGrabber;
+                lock (this.locker)
+                {
+                    if (Volatile.Read(ref this.isGrabbing) == 0)
+                        return;
+                    currentGrabber = this.streamGrabber ?? this.device?.StreamGrabber;
+                }
+
+                this.StopGrabCore(currentGrabber);
+            }
+            finally
+            {
+                this.operationGate.Release();
+            }
+        }
+
+        /// <summary>
+        /// 调用 native StopGrabbing，并且只在 native 成功后清除取流状态。
+        /// </summary>
+        private CameraResult StopGrabCore(IStreamGrabber currentGrabber)
+        {
+            if (Volatile.Read(ref this.isGrabbing) == 0)
+                return CameraResult.Success(MvError.MV_OK);
+
+            if (currentGrabber == null)
+            {
+                this.SetLastError("Stop grabbing failed because the stream grabber is null.");
+                return CameraResult.Fail(-1, "Stop grabbing failed");
+            }
 
             try
             {
-                this.device?.StreamGrabber?.StopGrabbing();
+                var result = currentGrabber.StopGrabbing();
+                if (result != MvError.MV_OK)
+                {
+                    // native 失败时保留 IsGrabbing=true，避免向上层伪装成已停止。
+                    this.SetLastError($"Stop grabbing failed with error code {result}.");
+                    return CameraResult.Fail(result, "Stop grabbing failed");
+                }
+
+                Interlocked.Exchange(ref this.isGrabbing, 0);
+                this.SetLastError(null);
+                return CameraResult.Success(result);
             }
-            catch
+            catch (MvException me)
             {
-                // 停止取流属于清理动作，失败不向上抛出，避免影响调用方的释放流程
+                this.SetLastError(me.Message);
+                return CameraResult.Fail(me.ErrorCode, me.Message);
+            }
+            catch (Exception e)
+            {
+                this.SetLastError(e.Message);
+                return CameraResult.Fail(-1, e.Message);
             }
         }
 
         /// <summary>
         /// 设置相机内部图像缓冲区数量（帧数）。
-        /// 相机已打开时立即生效，否则延迟到 <see cref="Open" /> 成功后应用
+        /// 相机已打开时立即生效，否则延迟到 <see cref="Connect" /> 成功后应用
         /// </summary>
         /// <param name="count">缓冲区数量，须大于0</param>
         /// <returns>
@@ -224,7 +441,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
 
             this.bufferCount = count;
 
-            if (this.device == null || !this.IsOpen)
+            if (this.device == null || !this.IsConnected)
                 return CameraResult.Success(0);
 
             try
@@ -344,7 +561,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// </returns>
         public CameraResult SetEnumParam(string paramName, string value)
         {
-            if (!this.IsOpen)
+            if (!this.IsConnected)
                 return CameraResult.Fail(-1, "Camera is not open");
 
             if (string.IsNullOrEmpty(paramName) || string.IsNullOrEmpty(value))
@@ -363,7 +580,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// </returns>
         public T GetParam<T>(string paramName)
         {
-            if (!this.IsOpen || string.IsNullOrEmpty(paramName))
+            if (!this.IsConnected || string.IsNullOrEmpty(paramName))
                 return default;
 
             try
@@ -420,9 +637,9 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// <returns>
         /// 枚举符号名，获取失败时返回空字符串
         /// </returns>
-        public string GetEnumValue(string paramName)
+        public string GetEnumParam(string paramName)
         {
-            if (!this.IsOpen || string.IsNullOrEmpty(paramName))
+            if (!this.IsConnected || string.IsNullOrEmpty(paramName))
                 return string.Empty;
 
             try
@@ -447,7 +664,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// </returns>
         public CameraResult ExecuteCommand(string command)
         {
-            if (!this.IsOpen)
+            if (!this.IsConnected)
                 return CameraResult.Fail(-1, "Camera is not open");
 
             if (string.IsNullOrEmpty(command))
@@ -461,50 +678,72 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// </summary>
         public void Dispose()
         {
-            if (Interlocked.CompareExchange(ref this.disposed, 1, 0) == 1)
-                return;
-
+            this.operationGate.Wait();
             try
             {
-                if (this.device != null)
+                IDevice currentDevice;
+                IStreamGrabber currentGrabber;
+                lock (this.locker)
                 {
-                    this.StopGrab();
+                    if (this.disposed == 1)
+                        return;
 
-                    try
-                    {
-                        this.device.StreamGrabber.FrameGrabedEvent -= this.ProcessFrameCallBack;
-                    }
-                    catch
-                    {
-                        // 解绑回调失败不阻断释放流程
-                    }
+                    this.disposed = 1;
+                    this.closing = true;
+                    this.callbacksEnabled = false;
+                    currentDevice = this.device;
+                    currentGrabber = this.streamGrabber ?? currentDevice?.StreamGrabber;
+                }
 
-                    try
-                    {
-                        this.device.Close();
-                    }
-                    catch
-                    {
-                        // 关闭失败不阻断释放流程
-                    }
+                try
+                {
+                    if (currentGrabber != null)
+                        currentGrabber.FrameGrabedEvent -= this.ProcessFrameCallBack;
+                }
+                catch (Exception freeError)
+                {
+                    this.SetLastError(freeError.Message);
+                }
 
-                    try
-                    {
-                        if (this.device is IDisposable disposable)
-                            disposable.Dispose();
-                    }
-                    catch
-                    {
-                        // 释放原生设备失败不阻断流程
-                    }
+                if (currentGrabber != null)
+                {
+                    this.StopGrabCore(currentGrabber);
+                }
 
+                this.WaitForCallbacks();
+
+                try
+                {
+                    currentDevice?.Close();
+                }
+                catch (Exception e)
+                {
+                    this.SetLastError(e.Message);
+                }
+
+                try
+                {
+                    if (currentDevice is IDisposable disposable)
+                        disposable.Dispose();
+                }
+                catch (Exception e)
+                {
+                    this.SetLastError(e.Message);
+                }
+
+                lock (this.locker)
+                {
                     this.device = null;
+                    this.streamGrabber = null;
+                    this.isOpen = 0;
+                    this.isGrabbing = 0;
+                    this.callbacksEnabled = false;
+                    this.closing = false;
                 }
             }
             finally
             {
-                Interlocked.Exchange(ref this.isOpen, 0);
-                Interlocked.Exchange(ref this.isGrabbing, 0);
+                this.operationGate.Release();
             }
         }
 
@@ -516,16 +755,28 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         private void ProcessFrameCallBack(object sender, FrameGrabbedEventArgs e)
         {
             var frameOut = e?.FrameOut;
+            if (frameOut == null) return;
 
-            if (frameOut == null)
-                return;
+            var callbackGrabber = sender as IStreamGrabber;
+            bool shouldPublish;
+            IStreamGrabber fallbackGrabber;
+            lock (this.locker)
+            {
+                this.inFlightCallbacks++;
+                this.callbacksDrained.Reset();
+                shouldPublish = this.callbacksEnabled
+                    && this.disposed == 0
+                    && this.isOpen == 1
+                    && !this.closing;
+                fallbackGrabber = this.streamGrabber;
+            }
 
             HikFrameWrapper frame = null;
 
             try
             {
                 // 克隆帧后再归还SDK缓冲区，使下游订阅者持有独立于SDK缓冲区的内存
-                if (frameOut.Clone() is IFrameOut cloned)
+                if (shouldPublish && frameOut.Clone() is IFrameOut cloned)
                 {
                     frame = new HikFrameWrapper(cloned);
                     this.stream.Publish(frame);
@@ -544,13 +795,65 @@ namespace Junevy.EasyCamera.Vendors.HikVision
             {
                 try
                 {
-                    this.device?.StreamGrabber?.FreeImageBuffer(frameOut);
+                    // frameOut 的所有权在进入回调时已经由SDK交给了本方法；
+                    // 无论相机是否正在 Dispose，都必须使用回调来源取流器归还。
+                    (callbackGrabber ?? fallbackGrabber)?.FreeImageBuffer(frameOut);
                 }
-                catch
+                catch (Exception freeError)
                 {
-                    // 归还缓冲区失败不向上抛出
+                    this.SetLastError(freeError.Message);
+                }
+                finally
+                {
+                    lock (this.locker)
+                    {
+                        this.inFlightCallbacks--;
+                        if (this.inFlightCallbacks <= 0)
+                        {
+                            this.inFlightCallbacks = 0;
+                            this.callbacksDrained.Set();
+                            Monitor.PulseAll(this.locker);
+                        }
+                    }
                 }
             }
+        }
+
+        /// <summary>
+        /// 等待已经开始的回调释放 SDK 缓冲区，避免设备句柄提前销毁。
+        /// </summary>
+        private void WaitForCallbacks()
+        {
+            lock (this.locker)
+            {
+                while (this.inFlightCallbacks > 0)
+                    Monitor.Wait(this.locker);
+            }
+        }
+
+        /// <summary>
+        /// 关闭失败后恢复回调订阅，使相机仍可被调用方重试关闭或停止取流。
+        /// </summary>
+        private void RestoreCallbackSubscription(IStreamGrabber currentGrabber)
+        {
+            if (currentGrabber == null)
+                return;
+
+            try
+            {
+                currentGrabber.FrameGrabedEvent -= this.ProcessFrameCallBack;
+                currentGrabber.FrameGrabedEvent += this.ProcessFrameCallBack;
+            }
+            catch (Exception e)
+            {
+                this.SetLastError(e.Message);
+            }
+        }
+
+        private void SetLastError(string message)
+        {
+            lock (this.locker)
+                this.lastError = message;
         }
 
         /// <summary>
@@ -562,7 +865,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// </returns>
         private CameraResult CheckReady(string paramName)
         {
-            if (!this.IsOpen)
+            if (!this.IsConnected)
                 return CameraResult.Fail(-1, "Camera is not open");
 
             if (string.IsNullOrEmpty(paramName))

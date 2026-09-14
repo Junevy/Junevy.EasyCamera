@@ -1,4 +1,5 @@
 using Junevy.EasyCamera.Core.Abstractions;
+using Junevy.EasyCamera.Common;
 using Junevy.EasyCamera.Core.Common;
 using Junevy.EasyCamera.Extensions;
 using Junevy.EasyCamera.Vendors.HikVision;
@@ -34,6 +35,12 @@ namespace Junevy.EasyCamera.Tests.Extensions
             Assert.IsNotNull(provider.GetService<CameraManager>());
             Assert.IsNotNull(provider.GetService<CameraService>());
             Assert.IsInstanceOfType(provider.GetService<ICameraProvider>(), typeof(AggregateCameraProvider));
+
+            // 接口与具体实现应解析为同一单例
+            Assert.AreSame(provider.GetService<StreamManager>(), provider.GetService<IStreamManager>());
+            Assert.AreSame(provider.GetService<CameraManager>(), provider.GetService<ICameraManager>());
+            Assert.AreSame(provider.GetService<CameraService>(), provider.GetService<ICameraService>());
+            Assert.AreSame(provider.GetService<StreamOptions>(), provider.GetService<IStreamOptions>());
 
             Assert.AreEqual(0, provider.GetServices<IVendorCameraProvider>().Count());
             Assert.IsNull(provider.GetService<ICameraSdkSystem>());
@@ -175,6 +182,9 @@ namespace Junevy.EasyCamera.Tests.Extensions
             Assert.AreSame(provider.GetService<StreamManager>(), provider.GetService<StreamManager>());
             Assert.AreSame(provider.GetService<CameraService>(), provider.GetService<CameraService>());
             Assert.AreSame(provider.GetService<ICameraProvider>(), provider.GetService<ICameraProvider>());
+            Assert.AreSame(provider.GetService<ICameraManager>(), provider.GetService<ICameraManager>());
+            Assert.AreSame(provider.GetService<IStreamManager>(), provider.GetService<IStreamManager>());
+            Assert.AreSame(provider.GetService<ICameraService>(), provider.GetService<ICameraService>());
         }
     }
 }

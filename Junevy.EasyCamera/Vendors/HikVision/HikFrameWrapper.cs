@@ -76,17 +76,39 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         public ulong ImageSize => this.native.Image.ImageSize;
 
         /// <summary>
-        /// 增加引用计数，防止图像帧被GC回收
+        /// 增加引用计数。已释放的帧不能重新取得引用，避免下游继续访问已释放的原生图像。
         /// </summary>
-        public void AddRef() => Interlocked.Increment(ref this.refCount);
+        public void AddRef()
+        {
+            while (true)
+            {
+                if (Volatile.Read(ref this.disposed) == 1)
+                    throw new ObjectDisposedException(nameof(HikFrameWrapper));
+
+                var current = Volatile.Read(ref this.refCount);
+                if (current <= 0)
+                    throw new ObjectDisposedException(nameof(HikFrameWrapper));
+
+                if (Interlocked.CompareExchange(ref this.refCount, current + 1, current) == current)
+                    return;
+            }
+        }
 
         /// <summary>
         /// 释放图像帧，引用计数归零时释放原生帧
         /// </summary>
         public void Dispose()
         {
-            if (Interlocked.Decrement(ref this.refCount) > 0)
+            var remaining = Interlocked.Decrement(ref this.refCount);
+            if (remaining > 0)
                 return;
+
+            // Dispose 应保持幂等；不要让重复释放把引用计数降到负数。
+            if (remaining < 0)
+            {
+                Interlocked.Increment(ref this.refCount);
+                return;
+            }
 
             // 保证原生帧只被释放一次（防止引用计数异常时重复释放）
             if (Interlocked.Exchange(ref this.disposed, 1) == 1)

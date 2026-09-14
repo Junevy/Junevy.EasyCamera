@@ -13,7 +13,7 @@ namespace Junevy.EasyCamera.Core.Abstractions
         /// <value>
         /// <c>true</c> if已打开;否则，<c>false</c>。
         /// </value>
-        bool IsOpen { get; }
+        bool IsConnected { get; }
 
         /// <summary>
         /// 是否正在取流
@@ -29,7 +29,7 @@ namespace Junevy.EasyCamera.Core.Abstractions
         /// <returns>
         /// <see cref="CameraResult" />
         /// </returns>
-        CameraResult Open();
+        CameraResult Connect();
 
         /// <summary>
         /// 关闭Camera
@@ -45,7 +45,7 @@ namespace Junevy.EasyCamera.Core.Abstractions
         /// <returns>
         /// <see cref="CameraResult" />
         /// </returns>
-        CameraResult Grab();
+        CameraResult StartGrab();
 
         /// <summary>
         /// 停止取流
@@ -126,15 +126,13 @@ namespace Junevy.EasyCamera.Core.Abstractions
         /// <returns>
         /// 枚举符号名，获取失败时返回空字符串
         /// </returns>
-        string GetEnumValue(string paramName);
+        string GetEnumParam(string paramName);
 
         /// <summary>
-        /// 执行命令
+        /// 执行 Gige 命令
         /// </summary>
         /// <param name="command">命令</param>
-        /// <returns>
-        /// <see cref="CameraResult" />
-        /// </returns>
+        /// <returns><see cref="CameraResult" /></returns>
         CameraResult ExecuteCommand(string command);
     }
 }

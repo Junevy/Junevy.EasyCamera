@@ -1,5 +1,5 @@
 using Junevy.EasyCamera.Core.Abstractions;
-using Junevy.EasyCamera.Core.Common;
+using Junevy.EasyCamera.Common;
 using MVSDK_Net;
 using System;
 using System.Collections.Generic;

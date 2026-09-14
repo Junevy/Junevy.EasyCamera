@@ -4,23 +4,23 @@ namespace Junevy.EasyCamera.Tests.Mocks
 {
     public class MockCamera : ICamera
     {
-        public bool IsOpen { get; private set; }
+        public bool IsConnected { get; private set; }
         public bool IsDisposed { get; private set; }
         public bool IsGrabbing { get; private set; }
 
-        public CameraResult Open()
+        public CameraResult Connect()
         {
-            IsOpen = true;
+            IsConnected = true;
             return CameraResult.Success(0);
         }
 
         public CameraResult Close()
         {
-            IsOpen = false;
+            IsConnected = false;
             return CameraResult.Success(0);
         }
 
-        public CameraResult Grab()
+        public CameraResult StartGrab()
         {
             IsGrabbing = true;
             return CameraResult.Success(0);
@@ -61,7 +61,7 @@ namespace Junevy.EasyCamera.Tests.Mocks
             return default;
         }
 
-        public string GetEnumValue(string paramName)
+        public string GetEnumParam(string paramName)
         {
             return string.Empty;
         }
@@ -79,7 +79,7 @@ namespace Junevy.EasyCamera.Tests.Mocks
         public void Dispose()
         {
             IsDisposed = true;
-            IsOpen = false;
+            IsConnected = false;
         }
     }
 }

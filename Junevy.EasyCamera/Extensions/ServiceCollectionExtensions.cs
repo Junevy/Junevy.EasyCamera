@@ -1,6 +1,7 @@
 using Junevy.EasyCamera.Core.Abstractions;
 using Junevy.EasyCamera.Core.Common;
 using Junevy.EasyCamera.Core.Extensions;
+using Junevy.EasyCamera.Common;
 using Junevy.EasyCamera.Vendors.HikVision;
 using Junevy.EasyCamera.Vendors.IRayple;
 using Microsoft.Extensions.DependencyInjection;
@@ -135,6 +136,41 @@ namespace Junevy.EasyCamera.Extensions
         private static void RegisterBasler()
         {
             throw new NotImplementedException("Basler camera support is not yet implemented.");
+        }
+    }
+}
+
+namespace Junevy.EasyCamera.Core.Extensions
+{
+    /// <summary>
+    /// 核心服务注册扩展，注册与具体厂商SDK无关的相机基础设施。
+    /// 原位于 Junevy.EasyCamera.Core 程序集，随实现类迁移至本程序集，
+    /// 保留原命名空间与类型名以维持对外契约
+    /// </summary>
+    public static class ServiceCollectionExtensions
+    {
+        /// <summary>
+        /// 注册相机核心服务（流管理、相机缓存、聚合提供器、相机服务）
+        /// </summary>
+        /// <param name="services">服务集合</param>
+        /// <returns>服务集合</returns>
+        /// <exception cref="ArgumentNullException">services 为 <c>null</c></exception>
+        public static IServiceCollection AddEasyCameraCore(this IServiceCollection services)
+        {
+            if (services == null)
+                throw new ArgumentNullException(nameof(services));
+
+            services.TryAddSingleton<StreamOptions>();
+            services.TryAddSingleton<IStreamOptions>(provider => provider.GetRequiredService<StreamOptions>());
+            services.TryAddSingleton<StreamManager>();
+            services.TryAddSingleton<IStreamManager>(provider => provider.GetRequiredService<StreamManager>());
+            services.TryAddSingleton<CameraManager>();
+            services.TryAddSingleton<ICameraManager>(provider => provider.GetRequiredService<CameraManager>());
+            services.TryAddSingleton<ICameraProvider, AggregateCameraProvider>();
+            services.TryAddSingleton<CameraService>();
+            services.TryAddSingleton<ICameraService>(provider => provider.GetRequiredService<CameraService>());
+
+            return services;
         }
     }
 }

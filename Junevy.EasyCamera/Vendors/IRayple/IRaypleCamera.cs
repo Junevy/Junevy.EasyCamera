@@ -54,7 +54,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// <summary>
         /// 是否已打开
         /// </summary>
-        public bool IsOpen => Volatile.Read(ref this.isOpen) == 1 && (this.camera?.IMV_IsOpen() ?? false);
+        public bool IsConnected => Volatile.Read(ref this.isOpen) == 1 && (this.camera?.IMV_IsOpen() ?? false);
 
         /// <summary>
         /// 是否正在取流
@@ -82,12 +82,12 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// <returns>
         /// 相机操作结果
         /// </returns>
-        public CameraResult Open()
+        public CameraResult Connect()
         {
             if (Volatile.Read(ref this.disposed) == 1)
                 return CameraResult.Fail(-1, "The camera has been disposed");
 
-            if (this.IsOpen)
+            if (this.IsConnected)
                 return CameraResult.Fail(-1, "The camera has been opened");
 
             try
@@ -172,9 +172,9 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// <returns>
         /// 相机操作结果
         /// </returns>
-        public CameraResult Grab()
+        public CameraResult StartGrab()
         {
-            if (!this.IsOpen)
+            if (!this.IsConnected)
                 return CameraResult.Fail(-1, "Camera is not open");
 
             // 由取流状态位保证并发调用只有一个线程能真正启动取流
@@ -222,7 +222,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
 
         /// <summary>
         /// 设置相机内部图像缓冲区数量（帧数）。
-        /// 相机已打开时立即生效，否则延迟到 <see cref="Open" /> 成功后应用
+        /// 相机已打开时立即生效，否则延迟到 <see cref="Connect" /> 成功后应用
         /// </summary>
         /// <param name="count">缓冲区数量，须大于0</param>
         /// <returns>
@@ -235,7 +235,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
 
             this.bufferCount = count;
 
-            if (this.camera == null || !this.IsOpen)
+            if (this.camera == null || !this.IsConnected)
                 return CameraResult.Success(0);
 
             try
@@ -378,7 +378,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// </returns>
         public T GetParam<T>(string paramName)
         {
-            if (!this.IsOpen || string.IsNullOrEmpty(paramName))
+            if (!this.IsConnected || string.IsNullOrEmpty(paramName))
                 return default;
 
             try
@@ -448,9 +448,9 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// <returns>
         /// 枚举符号名，获取失败时返回空字符串
         /// </returns>
-        public string GetEnumValue(string paramName)
+        public string GetEnumParam(string paramName)
         {
-            if (!this.IsOpen || string.IsNullOrEmpty(paramName))
+            if (!this.IsConnected || string.IsNullOrEmpty(paramName))
                 return string.Empty;
 
             try
@@ -477,7 +477,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// </returns>
         public CameraResult ExecuteCommand(string command)
         {
-            if (!this.IsOpen)
+            if (!this.IsConnected)
                 return CameraResult.Fail(-1, "Camera is not open");
 
             if (string.IsNullOrEmpty(command))
@@ -611,7 +611,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// </returns>
         private CameraResult CheckWriteable(string paramName)
         {
-            if (!this.IsOpen)
+            if (!this.IsConnected)
                 return CameraResult.Fail(-1, "Camera is not open");
 
             if (string.IsNullOrEmpty(paramName))

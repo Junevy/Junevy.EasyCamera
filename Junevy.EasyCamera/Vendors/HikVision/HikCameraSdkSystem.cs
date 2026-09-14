@@ -12,12 +12,12 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// <summary>
         /// 相机SDK系统是否已初始化
         /// </summary>
-        private int isInitialized;
+        private static int isInitialized;
 
         /// <summary>
         /// 是否已释放
         /// </summary>
-        private int disposed;
+        private static int disposed;
 
         /// <summary>
         /// 初始化相机SDK（幂等，可重复调用）
@@ -25,11 +25,10 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         public void Initialize()
         {
             // 已释放的SDK系统不再允许重新初始化，避免句柄与原生资源失配
-            if (Volatile.Read(ref this.disposed) == 1)
+            if (Interlocked.CompareExchange(ref disposed, 1, 1) == 1)
                 return;
 
-            if (Interlocked.CompareExchange(ref this.isInitialized, 1, 0) == 0)
-                SDKSystem.Initialize();
+            if (Interlocked.CompareExchange(ref isInitialized, 1, 0) == 0) SDKSystem.Initialize();
         }
 
         /// <summary>
@@ -37,7 +36,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// </summary>
         public void Release()
         {
-            if (Interlocked.CompareExchange(ref this.isInitialized, 0, 1) == 1)
+            if (Interlocked.CompareExchange(ref isInitialized, 0, 1) == 1)
                 SDKSystem.Finalize();
         }
 
@@ -46,10 +45,10 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// </summary>
         public void Dispose()
         {
-            if (Interlocked.CompareExchange(ref this.disposed, 1, 0) == 1)
-                return;
-
-            this.Release();
+            if (Interlocked.CompareExchange(ref disposed, 1, 0) == 0)
+            {
+                this.Release();
+            }
         }
     }
 }

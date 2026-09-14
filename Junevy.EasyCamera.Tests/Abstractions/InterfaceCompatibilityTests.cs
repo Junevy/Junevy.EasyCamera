@@ -1,5 +1,5 @@
 using Junevy.EasyCamera.Core.Abstractions;
-using Junevy.EasyCamera.Core.Common;
+using Junevy.EasyCamera.Common;
 using Junevy.EasyCamera.Tests.Mocks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Linq;
@@ -51,7 +51,7 @@ namespace Junevy.EasyCamera.Tests.Abstractions
         {
             var cameraManager = new CameraManager();
             var camera = new MockCamera();
-            cameraManager.Register("SN001", camera);
+            cameraManager.TryRegister("SN001", camera);
 
             var found = cameraManager.TryGet("SN001", out var cached);
             Assert.IsTrue(found);
@@ -59,17 +59,17 @@ namespace Junevy.EasyCamera.Tests.Abstractions
         }
 
         [TestMethod]
-        public void CameraManager_RegisterSameKeyTwice_ShouldOverwrite()
+        public void CameraManager_RegisterSameKeyTwice_ShouldKeepFirstRegistration()
         {
             var cameraManager = new CameraManager();
             var camera1 = new MockCamera();
             var camera2 = new MockCamera();
 
-            cameraManager.Register("SN001", camera1);
-            cameraManager.Register("SN001", camera2);
+            Assert.IsTrue(cameraManager.TryRegister("SN001", camera1));
+            Assert.IsFalse(cameraManager.TryRegister("SN001", camera2));
 
             cameraManager.TryGet("SN001", out var cached);
-            Assert.AreSame(camera2, cached);
+            Assert.AreSame(camera1, cached);
         }
 
         [TestMethod]
@@ -86,9 +86,9 @@ namespace Junevy.EasyCamera.Tests.Abstractions
         {
             var cameraManager = new CameraManager();
             var camera = new MockCamera();
-            cameraManager.Register("SN_Remove", camera);
+            cameraManager.TryRegister("SN_Remove", camera);
 
-            var result = cameraManager.Remove("SN_Remove");
+            var result = cameraManager.TryRemove("SN_Remove");
             Assert.IsTrue(result);
             Assert.IsTrue(camera.IsDisposed);
 
@@ -100,7 +100,7 @@ namespace Junevy.EasyCamera.Tests.Abstractions
         public void CameraManager_RemoveMissingKey_ShouldReturnFalse()
         {
             var cameraManager = new CameraManager();
-            var result = cameraManager.Remove("SN_NotExist");
+            var result = cameraManager.TryRemove("SN_NotExist");
             Assert.IsFalse(result);
         }
 
@@ -111,8 +111,8 @@ namespace Junevy.EasyCamera.Tests.Abstractions
             var camera1 = new MockCamera();
             var camera2 = new MockCamera();
 
-            cameraManager.Register("SN001", camera1);
-            cameraManager.Register("SN002", camera2);
+            cameraManager.TryRegister("SN001", camera1);
+            cameraManager.TryRegister("SN002", camera2);
 
             cameraManager.Dispose();
 
@@ -125,10 +125,10 @@ namespace Junevy.EasyCamera.Tests.Abstractions
         {
             var cameraManager = new CameraManager();
 
-            try { cameraManager.Register(null, new MockCamera()); Assert.Fail("Expected ArgumentNullException"); }
+            try { cameraManager.TryRegister(null, new MockCamera()); Assert.Fail("Expected ArgumentNullException"); }
             catch (System.ArgumentNullException) { }
 
-            try { cameraManager.Register("SN", null); Assert.Fail("Expected ArgumentNullException"); }
+            try { cameraManager.TryRegister("SN", null); Assert.Fail("Expected ArgumentNullException"); }
             catch (System.ArgumentNullException) { }
         }
 
@@ -136,7 +136,7 @@ namespace Junevy.EasyCamera.Tests.Abstractions
         public void CameraManager_RemoveWithNull_ShouldThrow()
         {
             var cameraManager = new CameraManager();
-            try { cameraManager.Remove(null); Assert.Fail("Expected ArgumentNullException"); }
+            try { cameraManager.TryRemove(null); Assert.Fail("Expected ArgumentNullException"); }
             catch (System.ArgumentNullException) { }
         }
     }

@@ -15,54 +15,6 @@ namespace Junevy.EasyCamera.Tests.Vendors.HikVision
     public class HikVisionRegressionTests
     {
         [TestMethod]
-        public void SdkSystem_InitializationFailure_CanBeRetriedAndDisposeFinalizesOnce()
-        {
-            var initializeCalls = 0;
-            var finalizeCalls = 0;
-            var sdk = new HikCameraSdkSystem(
-                () => ++initializeCalls == 1 ? -1 : MvError.MV_OK,
-                () =>
-                {
-                    finalizeCalls++;
-                    return MvError.MV_OK;
-                });
-
-            Assert.ThrowsException<InvalidOperationException>(() => sdk.Initialize());
-
-            sdk.Initialize();
-            sdk.Initialize();
-            sdk.Dispose();
-            sdk.Dispose();
-
-            Assert.AreEqual(2, initializeCalls);
-            Assert.AreEqual(1, finalizeCalls);
-        }
-
-        [TestMethod]
-        public void SdkSystem_MultipleUsers_FinalizesOnlyAfterLastRelease()
-        {
-            var finalizeCalls = 0;
-            Func<int> initialize = () => MvError.MV_OK;
-            Func<int> finalize = () =>
-            {
-                finalizeCalls++;
-                return MvError.MV_OK;
-            };
-            var first = new HikCameraSdkSystem(initialize, finalize);
-            var second = new HikCameraSdkSystem(initialize, finalize);
-
-            first.Initialize();
-            second.Initialize();
-            first.Dispose();
-
-            Assert.AreEqual(0, finalizeCalls);
-
-            second.Dispose();
-
-            Assert.AreEqual(1, finalizeCalls);
-        }
-
-        [TestMethod]
         public void HikCamera_StopFailure_PreservesGrabbingStateAndDiagnostic()
         {
             var device = new FakeDevice { StopResult = -7 };

@@ -22,6 +22,12 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         private int refCount = 1;
 
         /// <summary>
+        /// 引用计数保护锁，串行化 AddRef 与最后一次 Dispose 的竞态，
+        /// 防止引用计数为1时 AddRef 与释放并发导致 use-after-free
+        /// </summary>
+        private readonly object refLock = new();
+
+        /// <summary>
         /// 是否已释放原生帧
         /// </summary>
         private int disposed;
@@ -77,20 +83,17 @@ namespace Junevy.EasyCamera.Vendors.HikVision
 
         /// <summary>
         /// 增加引用计数。已释放的帧不能重新取得引用，避免下游继续访问已释放的原生图像。
+        /// 注意：AddRef 应在持有帧的回调（如订阅 handler）返回前完成引用转移，
+        /// 否则可能与最后一次 Dispose 并发导致访问已释放的非托管内存。
         /// </summary>
         public void AddRef()
         {
-            while (true)
+            lock (this.refLock)
             {
-                if (Volatile.Read(ref this.disposed) == 1)
+                if (this.disposed == 1 || this.refCount <= 0)
                     throw new ObjectDisposedException(nameof(HikFrameWrapper));
 
-                var current = Volatile.Read(ref this.refCount);
-                if (current <= 0)
-                    throw new ObjectDisposedException(nameof(HikFrameWrapper));
-
-                if (Interlocked.CompareExchange(ref this.refCount, current + 1, current) == current)
-                    return;
+                this.refCount++;
             }
         }
 
@@ -99,22 +102,42 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// </summary>
         public void Dispose()
         {
-            var remaining = Interlocked.Decrement(ref this.refCount);
-            if (remaining > 0)
-                return;
-
-            // Dispose 应保持幂等；不要让重复释放把引用计数降到负数。
-            if (remaining < 0)
+            lock (this.refLock)
             {
-                Interlocked.Increment(ref this.refCount);
-                return;
+                this.refCount--;
+                if (this.refCount > 0) return;
+
+                // Dispose 应保持幂等；不要让重复释放把引用计数降到负数。
+                if (this.refCount < 0)
+                {
+                    this.refCount++;
+                    return;
+                }
+
+                // 保证原生帧只被释放一次（防止引用计数异常时重复释放）
+                if (Interlocked.Exchange(ref this.disposed, 1) == 1) return;
             }
 
-            // 保证原生帧只被释放一次（防止引用计数异常时重复释放）
-            if (Interlocked.Exchange(ref this.disposed, 1) == 1)
-                return;
-
             this.native.Dispose();
+
+            // 原生帧释放成功后撤销终结器；若释放抛出异常，终结器保留作为兜底重试
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// 终结器兜底：引用方忘记 Dispose 时，由 GC 释放克隆帧的非托管缓冲，
+        /// 避免内存永久泄漏。正常路径已在 Dispose 中释放并撤销终结器。
+        /// </summary>
+        ~HikFrameWrapper()
+        {
+            try
+            {
+                this.native?.Dispose();
+            }
+            catch
+            {
+                // 终结器线程内不得抛出异常
+            }
         }
 
         /// <summary>

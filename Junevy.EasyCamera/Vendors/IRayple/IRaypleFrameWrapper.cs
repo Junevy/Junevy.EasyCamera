@@ -12,6 +12,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
     /// Irayple工业相机图像帧包装器。
     /// 构造时即将像素数据复制为托管内存，因此原生帧归还SDK后本对象依然安全可用。
     /// </summary>
+    [Obsolete("未开发完毕", true)]
     public class IRaypleFrameWrapper : IFrame
     {
         /// <summary>

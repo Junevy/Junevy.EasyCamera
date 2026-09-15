@@ -1,4 +1,5 @@
 using Junevy.EasyCamera.Core.Abstractions;
+using System;
 using System.Threading;
 
 namespace Junevy.EasyCamera.Vendors.IRayple
@@ -7,6 +8,8 @@ namespace Junevy.EasyCamera.Vendors.IRayple
     /// Irayple相机SDK系统。
     /// Irayple SDK 未提供全局初始化/反初始化接口，此处仅维护幂等的初始化状态标记
     /// </summary>
+
+    [Obsolete("未开发完毕", true)]
     public class IRaypleCameraSdkSystem : ICameraSdkSystem
     {
         /// <summary>

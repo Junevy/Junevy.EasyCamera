@@ -13,12 +13,18 @@ namespace Junevy.EasyCamera.Common
     {
         private int disposed;
 
-        public CameraStreamSuber(Channel<IFrame> channel, CancellationTokenSource cts, Task worker)
+        public CameraStreamSuber(string key, Channel<IFrame> channel, CancellationTokenSource cts, Task worker)
         {
+            this.Key = key ?? throw new ArgumentNullException(nameof(key));
             this.Channel = channel ?? throw new ArgumentNullException(nameof(channel));
             this.Cts = cts ?? throw new ArgumentNullException(nameof(cts));
             this.Subber = worker ?? throw new ArgumentNullException(nameof(worker));
         }
+
+        /// <summary>
+        /// 订阅者标识，与注册到流的 Key 一致
+        /// </summary>
+        public string Key { get; }
 
         public Channel<IFrame> Channel { get; }
 

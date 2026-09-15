@@ -3,7 +3,6 @@ using Junevy.EasyCamera.Common;
 using Junevy.EasyCamera.Core.Common;
 using Junevy.EasyCamera.Extensions;
 using Junevy.EasyCamera.Vendors.HikVision;
-using Junevy.EasyCamera.Vendors.IRayple;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
@@ -79,44 +78,34 @@ namespace Junevy.EasyCamera.Tests.Extensions
             Assert.IsNotNull(provider.GetService<CameraService>());
         }
 
+        /// <summary>
+        /// IRayple 厂商标记为 [Obsolete(..., true)]（未开发完毕），注册扩展按未实现厂商处理，
+        /// 启用时与 Basler 一致抛出 NotImplementedException
+        /// </summary>
         [TestMethod]
-        public void AddEasyCamera_WithIRayple_ShouldResolveVendorAndCompositeSdkSystem()
+        public void AddEasyCamera_WithIRayple_ShouldThrowNotImplementedException()
         {
             var services = new ServiceCollection();
-            services.AddEasyCamera(options => options.EnableIRayple = true);
 
-            var provider = services.BuildServiceProvider();
-
-            var vendors = provider.GetServices<IVendorCameraProvider>().ToList();
-            Assert.AreEqual(1, vendors.Count);
-            Assert.IsInstanceOfType(vendors[0], typeof(IRaypleCameraProvider));
-            Assert.AreEqual("iRAYPLE", vendors[0].VendorName);
-
-            Assert.IsNotNull(provider.GetService<IRaypleCameraSdkSystem>());
-            Assert.IsInstanceOfType(provider.GetService<ICameraSdkSystem>(), typeof(CompositeCameraSdkSystem));
+            Assert.ThrowsException<NotImplementedException>(() =>
+            {
+                services.AddEasyCamera(options => options.EnableIRayple = true);
+            });
         }
 
         [TestMethod]
-        public void AddEasyCamera_WithBothVendors_ShouldRegisterBothVendors()
+        public void AddEasyCamera_WithBothVendors_ShouldThrowNotImplementedExceptionForIRayple()
         {
             var services = new ServiceCollection();
-            services.AddEasyCamera(options =>
+
+            Assert.ThrowsException<NotImplementedException>(() =>
             {
-                options.EnableHikVision = true;
-                options.EnableIRayple = true;
+                services.AddEasyCamera(options =>
+                {
+                    options.EnableHikVision = true;
+                    options.EnableIRayple = true;
+                });
             });
-
-            var provider = services.BuildServiceProvider();
-
-            var vendors = provider.GetServices<IVendorCameraProvider>().ToList();
-            Assert.AreEqual(2, vendors.Count);
-            CollectionAssert.AreEquivalent(
-                new[] { "HikVision", "iRAYPLE" },
-                vendors.Select(vendor => vendor.VendorName).ToArray());
-
-            var aggregate = provider.GetService<ICameraProvider>() as AggregateCameraProvider;
-            Assert.IsNotNull(aggregate);
-            Assert.AreEqual(2, aggregate.Vendors.Count);
         }
 
         [TestMethod]
@@ -145,18 +134,18 @@ namespace Junevy.EasyCamera.Tests.Extensions
             Assert.IsNotNull(provider.GetService<ICameraSdkSystem>());
         }
 
+        /// <summary>
+        /// IRayple 厂商标记为 [Obsolete(..., true)]（未开发完毕），AddIRaypleCamera 启用后应抛出未实现异常
+        /// </summary>
         [TestMethod]
-        public void AddIRaypleCamera_ShouldRegisterIRaypleVendor()
+        public void AddIRaypleCamera_ShouldThrowNotImplementedException()
         {
             var services = new ServiceCollection();
-            services.AddIRaypleCamera();
 
-            var provider = services.BuildServiceProvider();
-
-            var vendors = provider.GetServices<IVendorCameraProvider>().ToList();
-            Assert.AreEqual(1, vendors.Count);
-            Assert.IsInstanceOfType(vendors[0], typeof(IRaypleCameraProvider));
-            Assert.IsNotNull(provider.GetService<ICameraSdkSystem>());
+            Assert.ThrowsException<NotImplementedException>(() =>
+            {
+                services.AddIRaypleCamera();
+            });
         }
 
         [TestMethod]

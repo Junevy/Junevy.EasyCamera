@@ -1,30 +1,47 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net48</TargetFramework>
+    <!-- 双目标：覆盖 net48 与 net8.0 两类宿主 -->
+    <TargetFrameworks>net48;net8.0</TargetFrameworks>
     <OutputType>Library</OutputType>
     <RootNamespace>Junevy.EasyCamera.Tests</RootNamespace>
     <AssemblyName>Junevy.EasyCamera.Tests</AssemblyName>
     <LangVersion>latest</LangVersion>
+    <!-- 厂商 SDK 为 AMD64 专用，测试宿主必须 x64 -->
     <PlatformTarget>x64</PlatformTarget>
     <IsTestProject>true</IsTestProject>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- 确保 NuGet 包的运行时资产复制到输出目录（net8.0 testhost 依赖清单校验需要） -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="MSTest.TestAdapter" />
     <PackageReference Include="MSTest.TestFramework" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <!-- SDK 10 testhost 的 additional-deps 需要 Newtonsoft.Json 13.0.3，随测试输出落盘以通过依赖解析 -->
+    <PackageReference Include="Newtonsoft.Json" />
   </ItemGroup>
 
-  <ItemGroup>
+  <!-- System.Drawing：net48 使用框架程序集，net8.0 使用 System.Drawing.Common 包 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <PackageReference Include="System.Drawing.Common" />
+    <!-- 修复 MSTest 3.x testhost 依赖清单校验失败 -->
+    <PackageReference Include="Microsoft.ApplicationInsights" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="MvCameraControl.Net">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\Nuget\MvCameraControl.Net.dll</HintPath>
+      <HintPath>..\Libs\MvCameraControl.Net.dll</HintPath>
     </Reference>
   </ItemGroup>
 

@@ -17,17 +17,25 @@
 
 ## 4. 项目介绍
 
-当前解决方案包含三个主要项目：
+当前解决方案包含三个主要项目，均采用 SDK 风格 csproj，并**双目标 net48 + net8.0**：
 
 - `Junevy.EasyCamera.Core`：公共抽象、相机服务/管理器/帧流契约及基础模型。
 - `Junevy.EasyCamera`：厂商适配和公共实现；HikVision 使用 `MvCameraControl.Net`，IRayple 使用其原生 SDK。
-- `Junevy.EasyCamera.Tests`：公共层、服务层和 HikVision 生命周期/并发回归测试，测试宿主固定为 x64/net48。
+- `Junevy.EasyCamera.Tests`：公共层、服务层和 HikVision 生命周期/并发回归测试，测试宿主固定为 x64。
 
-HikVision 与公共层的资源所有权约束：SDK 回调帧必须在回调内归还，发布给订阅者的帧必须是独立克隆；相机关闭/销毁前会停止取流、解绑回调并等待在途回调结束。`CameraStream` 使用非阻塞有界队列，队列淘汰的帧必须释放。IRayple 实现不属于本轮修复范围。
+构建与环境约定：
+
+- 厂商 SDK DLL 位于仓库根目录 `Libs/`（`MvCameraControl.Net.dll`、`MVSDK_Net.dll`），所有工程统一从该目录引用，构建自包含。
+- 包版本由根目录 `Directory.Packages.props`（中央包管理）统一维护；net48 通过条件引用补充 BCL 兼容包，net8.0 使用 `System.Drawing.Common`。
+- 两个类库在 net8.0 下声明程序集级 `SupportedOSPlatform("windows")`（工业相机 SDK 场景仅 Windows/x64）。
+- 根目录 `global.json` 固定 SDK 9.0.316，保证构建/测试可复现。
+- IRayple 厂商标记为 `[Obsolete("未开发完毕", true)]`：`ServiceCollectionExtensions` 不注册其服务，启用 `EnableIRayple` 时与 Basler 一致抛出 `NotImplementedException`。
+
+HikVision 与公共层的资源所有权约束：SDK 回调帧必须在回调内归还，发布给订阅者的帧必须是独立克隆；相机关闭/销毁前会停止取流、解绑回调并等待在途回调结束。`CameraStream` 使用非阻塞有界队列，队列淘汰的帧必须释放。
 
 验收命令：
 
 ```powershell
-dotnet build .\Junevy.EasyCamera\Junevy.EasyCamera.csproj -c Release --no-restore -v:minimal
-dotnet test .\Junevy.EasyCamera.Tests\Junevy.EasyCamera.Tests.csproj -c Release --no-restore --logger "console;verbosity=minimal"
+dotnet build .\Junevy.EasyCamera\Junevy.EasyCamera.csproj -c Release -v:minimal
+dotnet test .\Junevy.EasyCamera.Tests\Junevy.EasyCamera.Tests.csproj -c Release --logger "console;verbosity=minimal"
 ```

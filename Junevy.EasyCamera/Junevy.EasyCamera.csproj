@@ -1,100 +1,52 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{29ABB70B-55FB-4941-ABF1-A7966FFDDEBC}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <!-- 双目标：net48 兼容存量 .NET Framework 宿主，net8.0 面向新项目 -->
+    <TargetFrameworks>net48;net8.0</TargetFrameworks>
     <RootNamespace>Junevy.EasyCamera</RootNamespace>
     <AssemblyName>Junevy.EasyCamera</AssemblyName>
-    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <LangVersion>13</LangVersion>
+    <!-- 保留 Properties\AssemblyInfo.cs，避免与 SDK 自动生成的程序集特性冲突 -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Deterministic>true</Deterministic>
     <!-- 海康与Irayple的SDK程序集均为AMD64专用，必须显式指定x64，否则运行时将出现 BadImageFormatException -->
     <PlatformTarget>x64</PlatformTarget>
-    <FileAlignment>512</FileAlignment>
-    <Deterministic>true</Deterministic>
-    <NuGetPackageImportStamp>
-    </NuGetPackageImportStamp>
-    <TargetFrameworkProfile />
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
+
   <ItemGroup>
-    <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=8.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.Bcl.AsyncInterfaces.8.0.0\lib\net462\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Extensions.DependencyInjection.Abstractions, Version=8.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.Extensions.DependencyInjection.Abstractions.8.0.0\lib\net462\Microsoft.Extensions.DependencyInjection.Abstractions.dll</HintPath>
-    </Reference>
-    <Reference Include="MvCameraControl.Net, Version=3.4.0.1, Culture=neutral, PublicKeyToken=52fddfb3f94be800, processorArchitecture=AMD64">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\Nuget\MvCameraControl.Net.dll</HintPath>
+    <!-- 厂商 SDK（均位于仓库 Libs 目录，构建自包含） -->
+    <Reference Include="MvCameraControl.Net">
+      <HintPath>..\Libs\MvCameraControl.Net.dll</HintPath>
+      <Private>true</Private>
     </Reference>
     <Reference Include="MVSDK_Net">
-      <HintPath>..\..\..\Nuget\MVSDK_Net.dll</HintPath>
+      <HintPath>..\Libs\MVSDK_Net.dll</HintPath>
+      <Private>true</Private>
     </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=4.0.4.1, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Runtime.CompilerServices.Unsafe.4.5.3\lib\net461\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Threading.Channels, Version=8.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Threading.Channels.8.0.0\lib\net462\System.Threading.Channels.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Threading.Tasks.Extensions, Version=4.2.0.1, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Threading.Tasks.Extensions.4.5.4\lib\net461\System.Threading.Tasks.Extensions.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Xml" />
   </ItemGroup>
+
+  <!-- net48 需要的 BCL 兼容包；net8.0 已内置于共享框架，无需引用 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
+    <PackageReference Include="System.Threading.Channels" />
+    <PackageReference Include="System.Threading.Tasks.Extensions" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <PackageReference Include="System.Drawing.Common" />
+    <!-- System.Drawing 与厂商 SDK 均仅支持 Windows（工业相机场景），声明平台以消除 CA1416 -->
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatform">
+      <_Parameter1>windows</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <ItemGroup>
-    <Compile Include="Common\AggregateCameraProvider.cs" />
-    <Compile Include="Common\CameraManager.cs" />
-    <Compile Include="Common\CameraService.cs" />
-    <Compile Include="Common\CameraStream.cs" />
-    <Compile Include="Common\CameraStreamSuber.cs" />
-    <Compile Include="Common\CompositeCameraSdkSystem.cs" />
-    <Compile Include="Common\StreamManager.cs" />
-    <Compile Include="Common\StreamOptions.cs" />
-    <Compile Include="Extensions\CameraOptions.cs" />
-    <Compile Include="Extensions\ServiceCollectionExtensions.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Vendors\HikVision\HikCamera.cs" />
-    <Compile Include="Vendors\HikVision\HikCameraInfo.cs" />
-    <Compile Include="Vendors\HikVision\HikCameraProvider.cs" />
-    <Compile Include="Vendors\HikVision\HikCameraSdkSystem.cs" />
-    <Compile Include="Vendors\HikVision\HikFrameWrapper.cs" />
-    <Compile Include="Vendors\IRayple\IRaypleCamera.cs" />
-    <Compile Include="Vendors\IRayple\IRaypleCameraInfo.cs" />
-    <Compile Include="Vendors\IRayple\IRaypleCameraProvider.cs" />
-    <Compile Include="Vendors\IRayple\IRaypleCameraSdkSystem.cs" />
-    <Compile Include="Vendors\IRayple\IRaypleFrameWrapper.cs" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
+
   <ItemGroup>
-    <ProjectReference Include="..\Junevy.EasyCamera.Core\Junevy.EasyCamera.Core.csproj">
-      <Project>{3C48B864-D2AA-4868-9A87-48474D835F0A}</Project>
-      <Name>Junevy.EasyCamera.Core</Name>
-    </ProjectReference>
+    <ProjectReference Include="..\Junevy.EasyCamera.Core\Junevy.EasyCamera.Core.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
-  </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+
 </Project>

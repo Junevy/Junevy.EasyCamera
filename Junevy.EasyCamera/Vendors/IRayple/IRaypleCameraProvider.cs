@@ -11,6 +11,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
     /// <summary>
     /// Irayple工业相机提供器
     /// </summary>
+    [Obsolete("未开发完毕", true)]
     public class IRaypleCameraProvider : IVendorCameraProvider
     {
         /// <summary>

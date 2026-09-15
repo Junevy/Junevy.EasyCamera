@@ -10,6 +10,20 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
     <PackageVersion Include="MSTest.TestAdapter" Version="3.6.4" />
     <PackageVersion Include="MSTest.TestFramework" Version="3.6.4" />
+    <!-- vstest 集成必需：提供 testhost 与测试集成 targets -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <!-- 修复 MSTest 3.x net8.0 testhost 依赖清单校验失败（ApplicationInsights 未复制到输出目录） -->
+    <PackageVersion Include="Microsoft.ApplicationInsights" Version="2.22.0" />
+    <!-- 修复 SDK 10 testhost additional-deps 对 Newtonsoft.Json 13.0.3 的解析（需随测试输出落盘） -->
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
+    <!-- testhost 自身程序集需随测试输出落盘（additional-deps 按应用目录解析） -->
+    <PackageVersion Include="Microsoft.TestPlatform.TestHost" Version="17.14.1" />
     <PackageVersion Include="System.Drawing.Common" Version="8.0.0" />
+    <!-- net48 兼容包（net8.0 已内置于共享框架） -->
+    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="8.0.0" />
+    <PackageVersion Include="System.Threading.Channels" Version="8.0.0" />
+    <PackageVersion Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
+    <PackageVersion Include="System.Runtime.CompilerServices.Unsafe" Version="4.5.3" />
+    <PackageVersion Include="System.Buffers" Version="4.5.1" />
   </ItemGroup>
 </Project>

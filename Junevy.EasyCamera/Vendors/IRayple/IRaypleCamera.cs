@@ -9,6 +9,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
     /// <summary>
     /// Irayple工业相机
     /// </summary>
+    [Obsolete("未开发完毕", true)]
     public class IRaypleCamera : ICamera
     {
         /// <summary>

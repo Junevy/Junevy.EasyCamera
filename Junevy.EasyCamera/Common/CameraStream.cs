@@ -68,8 +68,9 @@ namespace Junevy.EasyCamera.Common
                 },
                 frame => DisposeFrame(frame, whenException));
             var cts = new CancellationTokenSource();
-            var worker = Task.Run(() => ConsumeAsync(channel, cts, handler, whenException));
-            var candidate = new CameraStreamSuber(channel, cts, worker);
+            CameraStreamSuber candidate = null;
+            var worker = Task.Run(() => ConsumeAsync(subberKey, candidate, channel, cts, handler, whenException));
+            candidate = new CameraStreamSuber(subberKey, channel, cts, worker);
 
             bool accepted;
             lock (this.operationLock)
@@ -172,11 +173,17 @@ namespace Junevy.EasyCamera.Common
         }
 
         private async Task ConsumeAsync(
+            string subberKey,
+            CameraStreamSuber self,
             Channel<IFrame> channel,
             CancellationTokenSource cts,
             Func<string, IFrame, Task> handler,
             Action<Exception> whenException)
         {
+            // 无异常回调时 handler 异常会终止 worker；终止后必须把订阅者从流中
+            // 移除，否则 Publish 会继续向已死订阅者的通道写入帧，造成帧滞留泄漏
+            // 且订阅静默失效。
+            var terminated = false;
             try
             {
                 while (await channel.Reader.WaitToReadAsync(cts.Token).ConfigureAwait(false))
@@ -207,6 +214,7 @@ namespace Junevy.EasyCamera.Common
             }
             catch (Exception ex)
             {
+                terminated = true;
                 // 无异常回调时，handler 异常只终止当前 worker，不能再次调用 null 委托。
                 NotifyException(whenException, ex);
             }
@@ -214,7 +222,34 @@ namespace Junevy.EasyCamera.Common
             {
                 while (channel.Reader.TryRead(out var leftover))
                     DisposeFrame(leftover, whenException);
+
+                if (terminated)
+                    RemoveDeadSubscriber(subberKey, self);
             }
+        }
+
+        /// <summary>
+        /// 订阅工作线程异常终止后移除该订阅者并释放其资源，
+        /// 防止后续发布帧滞留在无人消费的通道中造成非托管内存泄漏。
+        /// </summary>
+        private void RemoveDeadSubscriber(string subberKey, CameraStreamSuber self)
+        {
+            lock (this.operationLock)
+            {
+                // 流已整体释放时，Dispose 路径已处理过该订阅者
+                if (this.disposed == 1)
+                    return;
+
+                // 仅当字典中仍是该实例时才移除，避免误删同 Key 的重新订阅
+                if (this.subscribers.TryGetValue(subberKey, out var current)
+                    && ReferenceEquals(current, self))
+                {
+                    this.subscribers.TryRemove(subberKey, out _);
+                }
+            }
+
+            // worker 已结束，Dispose 只会完成通道并释放 CTS
+            self?.Dispose();
         }
 
         private static void DisposeFrame(IFrame frame, Action<Exception> whenException)

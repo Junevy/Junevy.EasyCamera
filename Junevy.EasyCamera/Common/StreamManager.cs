@@ -2,6 +2,7 @@ using Junevy.EasyCamera.Core.Abstractions;
 using Junevy.EasyCamera.Core.Common;
 using System;
 using System.Collections.Concurrent;
+using System.Threading;
 
 namespace Junevy.EasyCamera.Common
 {
@@ -11,12 +12,16 @@ namespace Junevy.EasyCamera.Common
     public class StreamManager : IStreamManager
     {
         private readonly ConcurrentDictionary<string, ICameraStream> streams = new();
+        private int disposed;
 
         /// <summary>
         /// 释放所有图像数据流
         /// </summary>
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref this.disposed, 1) == 1)
+                return;
+
             foreach (var stream in streams.Values)
             {
                 try
@@ -61,6 +66,9 @@ namespace Junevy.EasyCamera.Common
             stream = null;
 
             if (string.IsNullOrEmpty(userDefinedName))
+                return false;
+
+            if (Volatile.Read(ref this.disposed) == 1)
                 return false;
 
             return streams.TryGetValue(userDefinedName, out stream);

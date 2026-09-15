@@ -3,7 +3,6 @@ using Junevy.EasyCamera.Core.Common;
 using Junevy.EasyCamera.Core.Extensions;
 using Junevy.EasyCamera.Common;
 using Junevy.EasyCamera.Vendors.HikVision;
-using Junevy.EasyCamera.Vendors.IRayple;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System;
@@ -58,8 +57,8 @@ namespace Junevy.EasyCamera.Extensions
 
             if (options.EnableIRayple)
             {
-                RegisterIRayple(services);
-                sdkSystemFactories.Add(provider => provider.GetRequiredService<IRaypleCameraSdkSystem>());
+                // IRayple 厂商标记为 [Obsolete(..., true)]（未开发完毕），与 Basler 一致，启用时抛出未实现异常
+                RegisterIRayple();
             }
 
             if (options.EnableBasler)
@@ -119,12 +118,12 @@ namespace Junevy.EasyCamera.Extensions
         /// <summary>
         /// 注册Irayple相机厂商服务
         /// </summary>
-        /// <param name="services">服务集合</param>
-        private static void RegisterIRayple(IServiceCollection services)
+        /// <exception cref="NotImplementedException">
+        /// Irayple 相机支持尚未开发完毕（与厂商实现类的 <c>[Obsolete(..., true)]</c> 标记保持一致）
+        /// </exception>
+        private static void RegisterIRayple()
         {
-            services.TryAddSingleton<IRaypleCameraSdkSystem>();
-
-            services.TryAddEnumerable(ServiceDescriptor.Singleton<IVendorCameraProvider, IRaypleCameraProvider>());
+            throw new NotImplementedException("IRayple camera support is not yet implemented.");
         }
 
         /// <summary>

@@ -60,7 +60,11 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// </summary>
         private int inFlightCallbacks;
 
-        private readonly ManualResetEventSlim callbacksDrained = new(true);
+        /// <summary>
+        /// 关闭/释放时等待在途回调排空的超时时间。
+        /// </summary>
+        private static readonly TimeSpan CallbackDrainTimeout = TimeSpan.FromSeconds(5);
+
         private bool callbacksEnabled;
         private bool closing;
         private string lastError;
@@ -763,7 +767,6 @@ namespace Junevy.EasyCamera.Vendors.HikVision
             lock (this.locker)
             {
                 this.inFlightCallbacks++;
-                this.callbacksDrained.Reset();
                 shouldPublish = this.callbacksEnabled
                     && this.disposed == 0
                     && this.isOpen == 1
@@ -811,7 +814,6 @@ namespace Junevy.EasyCamera.Vendors.HikVision
                         if (this.inFlightCallbacks <= 0)
                         {
                             this.inFlightCallbacks = 0;
-                            this.callbacksDrained.Set();
                             Monitor.PulseAll(this.locker);
                         }
                     }
@@ -821,13 +823,23 @@ namespace Junevy.EasyCamera.Vendors.HikVision
 
         /// <summary>
         /// 等待已经开始的回调释放 SDK 缓冲区，避免设备句柄提前销毁。
+        /// 带有限超时：SDK 回调挂死时记录诊断信息并继续关闭，避免 Close/Dispose 永久阻塞。
         /// </summary>
         private void WaitForCallbacks()
         {
             lock (this.locker)
             {
+                var deadline = DateTime.UtcNow + CallbackDrainTimeout;
                 while (this.inFlightCallbacks > 0)
-                    Monitor.Wait(this.locker);
+                {
+                    var remaining = deadline - DateTime.UtcNow;
+                    if (remaining <= TimeSpan.Zero || !Monitor.Wait(this.locker, remaining))
+                    {
+                        this.SetLastError(
+                            $"Timed out waiting for {this.inFlightCallbacks} in-flight frame callback(s) to drain.");
+                        break;
+                    }
+                }
             }
         }
 

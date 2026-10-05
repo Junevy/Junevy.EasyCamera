@@ -33,6 +33,12 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         private int disposed;
 
         /// <summary>
+        /// 托管像素副本缓存：SDK 的 PixelData 可能每次访问重新拷贝，
+        /// 缓存为一次性成本；释放后托管副本仍可安全读取（原生缓冲不受影响）
+        /// </summary>
+        private byte[] pixelData;
+
+        /// <summary>
         /// 构造海康相机图像帧包装器
         /// </summary>
         /// <param name="nativeFrame">海康相机图像帧（须为具备独立缓冲区的克隆帧）</param>
@@ -52,9 +58,24 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         public IntPtr PixelDataPtr => this.native.Image.PixelDataPtr;
 
         /// <summary>
-        /// 图像数据数组，托管内存
+        /// 图像数据数组，托管内存（首次访问时缓存；
+        /// 帧已释放且从未访问过时返回空数组）
         /// </summary>
-        public byte[] Data => this.native.Image.PixelData;
+        public byte[] Data
+        {
+            get
+            {
+                var cached = this.pixelData;
+                if (cached != null)
+                    return cached;
+
+                if (Volatile.Read(ref this.disposed) == 1)
+                    return Array.Empty<byte>();
+
+                var data = this.native.Image.PixelData;
+                return Interlocked.CompareExchange(ref this.pixelData, data, null) ?? data;
+            }
+        }
 
         /// <summary>
         /// 图像行步长，单位：字节

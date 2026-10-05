@@ -144,6 +144,31 @@ namespace Junevy.EasyCamera.Tests.Vendors.HikVision
             Assert.AreEqual(0, overflowLow);
         }
 
+        [TestMethod]
+        public void HikFrameWrapper_Data_ReturnsSameInstanceOnRepeatedAccess()
+        {
+            var frame = new HikFrameWrapper(new FakeFrameOut());
+
+            var first = frame.Data;
+            var second = frame.Data;
+
+            Assert.AreSame(first, second, "Data 必须缓存，禁止每次访问都触发 SDK 拷贝（5MB+/次）");
+        }
+
+        [TestMethod]
+        public void HikFrameWrapper_Data_AfterDispose_ReturnsCachedOrEmpty()
+        {
+            var accessed = new HikFrameWrapper(new FakeFrameOut());
+            var cached = accessed.Data;
+            accessed.Dispose();
+            Assert.AreSame(cached, accessed.Data, "已释放帧的已缓存托管副本必须仍可安全读取");
+
+            var neverAccessed = new HikFrameWrapper(new FakeFrameOut());
+            neverAccessed.Dispose();
+            Assert.IsNotNull(neverAccessed.Data);
+            Assert.AreEqual(0, neverAccessed.Data.Length, "未缓存且已释放的帧返回空数组，禁止触达已释放原生内存");
+        }
+
         private static HikCamera CreateCamera(FakeDevice device, ICameraStream stream = null)
         {
             var info = new FakeDeviceInfo { SerialNumber = "HIK-001" };

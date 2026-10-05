@@ -41,6 +41,7 @@ HikVision 与公共层的资源所有权约束：SDK 回调帧必须在回调内
 - 取参推荐 `TryGetParam<T>`/`TryGetEnumParam`（可区分"值恰为 default"与"获取失败"）；`SetTrigger(cameraKey, triggerSource, enableTrigger)`；`HikFrameWrapper.Data` 为懒缓存托管副本。
 - SDK Initialize/Finalize 由 `HikCameraSdkSystem` 按实例引用计数管理（含 internal 测试 seam，经 `InternalsVisibleTo` 供无硬件单测使用）。
 - 项目入口文档为根目录 `README.md`（现状/快速上手/推荐用法）。
+- 面向消费方 Agent 的包使用说明书位于 `skills/using-junevy-easycamera/SKILL.md`（可复制到任意 Agent 运行时的技能目录使用）；修改公共 API 后必须同步更新该文件。
 
 验收命令：
 

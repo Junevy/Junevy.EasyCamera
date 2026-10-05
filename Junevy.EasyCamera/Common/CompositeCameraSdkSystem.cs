@@ -26,21 +26,49 @@ namespace Junevy.EasyCamera.Common
         }
 
         /// <summary>
-        /// 按注册顺序初始化所有厂商SDK
+        /// 按注册顺序初始化所有厂商SDK。
+        /// 单个厂商初始化失败不中断其余厂商；全部处理完后以 AggregateException 汇报。
         /// </summary>
         public void Initialize()
         {
+            var errors = new List<Exception>();
             foreach (var system in this.systems)
-                system.Initialize();
+            {
+                try
+                {
+                    system.Initialize();
+                }
+                catch (Exception ex)
+                {
+                    errors.Add(ex);
+                }
+            }
+
+            if (errors.Count > 0)
+                throw new AggregateException("One or more camera SDK systems failed to initialize.", errors);
         }
 
         /// <summary>
-        /// 按注册顺序释放所有厂商SDK
+        /// 按注册顺序释放所有厂商SDK。
+        /// 单个厂商释放失败不中断其余厂商；全部处理完后以 AggregateException 汇报。
         /// </summary>
         public void Release()
         {
+            var errors = new List<Exception>();
             foreach (var system in this.systems)
-                system.Release();
+            {
+                try
+                {
+                    system.Release();
+                }
+                catch (Exception ex)
+                {
+                    errors.Add(ex);
+                }
+            }
+
+            if (errors.Count > 0)
+                throw new AggregateException("One or more camera SDK systems failed to release.", errors);
         }
 
         /// <summary>

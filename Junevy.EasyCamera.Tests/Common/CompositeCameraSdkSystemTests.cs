@@ -60,6 +60,30 @@ namespace Junevy.EasyCamera.Tests.Common
             Assert.ThrowsException<ArgumentNullException>(() => new CompositeCameraSdkSystem(null));
         }
 
+        [TestMethod]
+        public void Initialize_WhenOneThrows_ShouldStillInitializeOthers()
+        {
+            var throwing = new FakeSdkSystem("throwing") { ThrowOnInitialize = true };
+            var healthy = new FakeSdkSystem("healthy");
+
+            var composite = new CompositeCameraSdkSystem(new ICameraSdkSystem[] { throwing, healthy });
+
+            Assert.ThrowsException<AggregateException>(() => composite.Initialize());
+            Assert.IsTrue(healthy.CallLog.Contains("healthy:init"), "单个SDK初始化失败不应中断其余SDK");
+        }
+
+        [TestMethod]
+        public void Release_WhenOneThrows_ShouldStillReleaseOthers()
+        {
+            var throwing = new FakeSdkSystem("throwing") { ThrowOnRelease = true };
+            var healthy = new FakeSdkSystem("healthy");
+
+            var composite = new CompositeCameraSdkSystem(new ICameraSdkSystem[] { throwing, healthy });
+            composite.Initialize();
+            Assert.ThrowsException<AggregateException>(() => composite.Release());
+            Assert.IsTrue(healthy.CallLog.Contains("healthy:release"), "单个SDK释放失败不应中断其余SDK");
+        }
+
         private class FakeSdkSystem : ICameraSdkSystem
         {
             private readonly List<string> calls = new List<string>();
@@ -75,11 +99,25 @@ namespace Junevy.EasyCamera.Tests.Common
 
             public bool ThrowOnDispose { get; set; }
 
+            public bool ThrowOnInitialize { get; set; }
+
+            public bool ThrowOnRelease { get; set; }
+
             public string CallLog => string.Join(",", this.calls);
 
-            public void Initialize() => this.calls.Add(this.Name + ":init");
+            public void Initialize()
+            {
+                if (this.ThrowOnInitialize)
+                    throw new InvalidOperationException("initialize failed");
+                this.calls.Add(this.Name + ":init");
+            }
 
-            public void Release() => this.calls.Add(this.Name + ":release");
+            public void Release()
+            {
+                if (this.ThrowOnRelease)
+                    throw new InvalidOperationException("release failed");
+                this.calls.Add(this.Name + ":release");
+            }
 
             public void Dispose()
             {

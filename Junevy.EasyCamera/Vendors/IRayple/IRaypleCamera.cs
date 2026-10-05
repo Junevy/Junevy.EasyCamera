@@ -370,6 +370,21 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         }
 
         /// <summary>
+        /// long → int 的受检转换：越界按"取值失败"处理，禁止静默回绕
+        /// </summary>
+        private static bool TryConvertToInt64ToInt32(long value, out int result)
+        {
+            if (value < int.MinValue || value > int.MaxValue)
+            {
+                result = 0;
+                return false;
+            }
+
+            result = (int)value;
+            return true;
+        }
+
+        /// <summary>
         /// 获取参数
         /// </summary>
         /// <typeparam name="T">参数类型，支持 int、long、float、double、bool、string</typeparam>
@@ -389,8 +404,9 @@ namespace Junevy.EasyCamera.Vendors.IRayple
                 if (type == typeof(int))
                 {
                     long value = 0;
-                    if (this.camera.IMV_GetIntFeatureValue(paramName, ref value) == IMV_OK)
-                        return (T)(object)(int)value;
+                    if (this.camera.IMV_GetIntFeatureValue(paramName, ref value) == IMV_OK
+                        && TryConvertToInt64ToInt32(value, out var value32))
+                        return (T)(object)value32;
                     return default;
                 }
 

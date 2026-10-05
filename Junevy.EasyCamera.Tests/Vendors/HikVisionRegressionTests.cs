@@ -131,6 +131,19 @@ namespace Junevy.EasyCamera.Tests.Vendors.HikVision
             Assert.AreEqual((DeviceTLayerType)0, unknown);
         }
 
+        [TestMethod]
+        public void HikCamera_Int32Conversion_OutOfRangeReturnsFailure()
+        {
+            Assert.IsTrue(HikCamera.TryConvertToInt64ToInt32(12345L, out var value));
+            Assert.AreEqual(12345, value);
+
+            Assert.IsFalse(HikCamera.TryConvertToInt64ToInt32((long)int.MaxValue + 1, out var overflowHigh));
+            Assert.AreEqual(0, overflowHigh);
+
+            Assert.IsFalse(HikCamera.TryConvertToInt64ToInt32((long)int.MinValue - 1, out var overflowLow));
+            Assert.AreEqual(0, overflowLow);
+        }
+
         private static HikCamera CreateCamera(FakeDevice device, ICameraStream stream = null)
         {
             var info = new FakeDeviceInfo { SerialNumber = "HIK-001" };

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-10-05（2026-10-05 审查问题修复）
+
+审查报告见 `docs/代码审查报告-2026-10-05.md`，实施计划见 `docs/superpowers/plans/2026-10-05-review-findings-fix.md`。
+
+- **StreamManager**：补齐声明过但缺失的 disposed 防护——释放后 `GetOrCreateStream` 抛 `ObjectDisposedException`（与 Dispose 竞态时就地释放新建流，杜绝无人持有的流常驻）、`RemoveStream` 返回 false；新增回归测试。
+
 ## 2026-09-15（稳定性全链路审查与修复）
 
 - 全链路审查相机/图像生命周期与非托管资源（审查报告见 `docs/稳定性审查报告-2026-09-15.md`），确认帧主线（回调内 Clone → 归还 SDK 缓冲 → 独立克隆发布 → 订阅者消费/淘汰/取消释放）与相机关闭主线（解绑回调 → StopGrab → 等待在途回调 → Close）设计正确，并修复以下缺陷：

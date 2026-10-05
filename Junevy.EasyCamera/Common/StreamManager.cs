@@ -50,7 +50,16 @@ namespace Junevy.EasyCamera.Common
             if (string.IsNullOrEmpty(userDefinedName))
                 throw new ArgumentNullException(nameof(userDefinedName));
 
-            return streams.GetOrAdd(userDefinedName, _ => new CameraStream(userDefinedName));
+            var stream = streams.GetOrAdd(userDefinedName, _ => new CameraStream(userDefinedName));
+
+            // 与 Dispose 竞态时，字典外的新建流必须就地释放，避免无人持有的流常驻
+            if (Volatile.Read(ref this.disposed) == 1)
+            {
+                stream.Dispose();
+                throw new ObjectDisposedException(nameof(StreamManager));
+            }
+
+            return stream;
         }
 
         /// <summary>
@@ -84,6 +93,9 @@ namespace Junevy.EasyCamera.Common
         public bool RemoveStream(string userDefinedName)
         {
             if (string.IsNullOrEmpty(userDefinedName))
+                return false;
+
+            if (Volatile.Read(ref this.disposed) == 1)
                 return false;
 
             if (streams.TryRemove(userDefinedName, out var stream))

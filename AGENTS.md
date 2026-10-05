@@ -31,7 +31,16 @@
 - 根目录 `global.json` 固定 SDK 9.0.316，保证构建/测试可复现。
 - IRayple 厂商标记为 `[Obsolete("未开发完毕", true)]`：`ServiceCollectionExtensions` 不注册其服务，启用 `EnableIRayple` 时与 Basler 一致抛出 `NotImplementedException`。
 
-HikVision 与公共层的资源所有权约束：SDK 回调帧必须在回调内归还，发布给订阅者的帧必须是独立克隆；相机关闭/销毁前会停止取流、解绑回调并等待在途回调结束。`CameraStream` 使用非阻塞有界队列，队列淘汰的帧必须释放。
+HikVision 与公共层的资源所有权约束：SDK 回调帧必须在回调内归还；发布给订阅者的帧必须是对 SDK 缓冲的**独立克隆——每帧仅在相机回调中克隆一次**，多订阅者通过引用计数**浅共享**同一克隆（不逐订阅者深拷贝，订阅者为只读消费者）；克隆缓冲由**最后一个归零的引用持有者**物理释放（不得固定为发布者，否则其余浅引用悬空）。相机关闭/销毁前会停止取流、解绑回调并等待在途回调结束。`CameraStream` 使用非阻塞有界队列（DropOldest），队列淘汰的帧必须释放。
+
+公共契约要点（2026-10-05 审查修复后）：
+
+- `CameraInterfaceType`（原 `CameraType`）表示设备物理接口类型（GigE/USB/CameraLink/GenTL），与品牌无关；枚举成员为 `All`（非 `ALL`）。
+- 帧流订阅者为 `CameraStreamSubscriber`（原 `CameraStreamSuber`），订阅参数名 `subscriberKey`；同 Key 重复订阅为**原子替换**语义。
+- `ICameraManager.Remove` 返回 `CameraRemoveStatus`（Removed/NotFound/ReleaseFailed），`LastError` 已提升到接口并在成功清理后清空。
+- 取参推荐 `TryGetParam<T>`/`TryGetEnumParam`（可区分"值恰为 default"与"获取失败"）；`SetTrigger(cameraKey, triggerSource, enableTrigger)`；`HikFrameWrapper.Data` 为懒缓存托管副本。
+- SDK Initialize/Finalize 由 `HikCameraSdkSystem` 按实例引用计数管理（含 internal 测试 seam，经 `InternalsVisibleTo` 供无硬件单测使用）。
+- 项目入口文档为根目录 `README.md`（现状/快速上手/推荐用法）。
 
 验收命令：
 

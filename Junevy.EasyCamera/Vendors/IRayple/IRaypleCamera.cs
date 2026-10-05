@@ -384,6 +384,85 @@ namespace Junevy.EasyCamera.Vendors.IRayple
             return true;
         }
 
+        public bool TryGetParam<T>(string paramName, out T value)
+        {
+            value = default;
+            if (!this.IsConnected || string.IsNullOrEmpty(paramName))
+                return false;
+
+            try
+            {
+                var type = typeof(T);
+
+                if (type == typeof(int))
+                {
+                    long longValue = 0;
+                    if (this.camera.IMV_GetIntFeatureValue(paramName, ref longValue) == IMV_OK
+                        && TryConvertToInt64ToInt32(longValue, out var value32))
+                    {
+                        value = (T)(object)value32;
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                if (type == typeof(long))
+                {
+                    long longValue = 0;
+                    if (this.camera.IMV_GetIntFeatureValue(paramName, ref longValue) == IMV_OK)
+                    {
+                        value = (T)(object)longValue;
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                if (type == typeof(float) || type == typeof(double))
+                {
+                    double doubleValue = 0;
+                    if (this.camera.IMV_GetDoubleFeatureValue(paramName, ref doubleValue) == IMV_OK)
+                    {
+                        value = (T)(object)(type == typeof(float) ? (object)(float)doubleValue : (object)doubleValue);
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                if (type == typeof(bool))
+                {
+                    var boolValue = false;
+                    if (this.camera.IMV_GetBoolFeatureValue(paramName, ref boolValue) == IMV_OK)
+                    {
+                        value = (T)(object)boolValue;
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                if (type == typeof(string))
+                {
+                    var stringValue = new IMV_String { str = string.Empty };
+                    if (this.camera.IMV_GetStringFeatureValue(paramName, ref stringValue) == IMV_OK)
+                    {
+                        value = (T)(object)(stringValue.str ?? string.Empty);
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         /// <summary>
         /// 获取参数
         /// </summary>
@@ -393,68 +472,29 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// 参数值，类型不支持或相机不可用时返回 default(T)
         /// </returns>
         public T GetParam<T>(string paramName)
+            => this.TryGetParam<T>(paramName, out var value) ? value : default;
+
+        public bool TryGetEnumParam(string paramName, out string value)
         {
+            value = null;
             if (!this.IsConnected || string.IsNullOrEmpty(paramName))
-                return default;
+                return false;
 
             try
             {
-                var type = typeof(T);
+                var enumValue = new IMV_String { str = string.Empty };
 
-                if (type == typeof(int))
+                if (this.camera.IMV_GetEnumFeatureSymbol(paramName, ref enumValue) == IMV_OK)
                 {
-                    long value = 0;
-                    if (this.camera.IMV_GetIntFeatureValue(paramName, ref value) == IMV_OK
-                        && TryConvertToInt64ToInt32(value, out var value32))
-                        return (T)(object)value32;
-                    return default;
+                    value = enumValue.str ?? string.Empty;
+                    return true;
                 }
 
-                if (type == typeof(long))
-                {
-                    long value = 0;
-                    if (this.camera.IMV_GetIntFeatureValue(paramName, ref value) == IMV_OK)
-                        return (T)(object)value;
-                    return default;
-                }
-
-                if (type == typeof(float))
-                {
-                    double value = 0;
-                    if (this.camera.IMV_GetDoubleFeatureValue(paramName, ref value) == IMV_OK)
-                        return (T)(object)(float)value;
-                    return default;
-                }
-
-                if (type == typeof(double))
-                {
-                    double value = 0;
-                    if (this.camera.IMV_GetDoubleFeatureValue(paramName, ref value) == IMV_OK)
-                        return (T)(object)value;
-                    return default;
-                }
-
-                if (type == typeof(bool))
-                {
-                    var value = false;
-                    if (this.camera.IMV_GetBoolFeatureValue(paramName, ref value) == IMV_OK)
-                        return (T)(object)value;
-                    return default;
-                }
-
-                if (type == typeof(string))
-                {
-                    var value = new IMV_String { str = string.Empty };
-                    if (this.camera.IMV_GetStringFeatureValue(paramName, ref value) == IMV_OK)
-                        return (T)(object)(value.str ?? string.Empty);
-                    return default;
-                }
-
-                return default;
+                return false;
             }
             catch
             {
-                return default;
+                return false;
             }
         }
 
@@ -466,24 +506,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// 枚举符号名，获取失败时返回空字符串
         /// </returns>
         public string GetEnumParam(string paramName)
-        {
-            if (!this.IsConnected || string.IsNullOrEmpty(paramName))
-                return string.Empty;
-
-            try
-            {
-                var value = new IMV_String { str = string.Empty };
-
-                if (this.camera.IMV_GetEnumFeatureSymbol(paramName, ref value) == IMV_OK)
-                    return value.str ?? string.Empty;
-            }
-            catch
-            {
-                // 读取失败按“无值”处理
-            }
-
-            return string.Empty;
-        }
+            => this.TryGetEnumParam(paramName, out var value) ? value : string.Empty;
 
         /// <summary>
         /// 执行命令

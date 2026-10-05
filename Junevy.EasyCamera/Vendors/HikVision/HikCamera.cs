@@ -589,18 +589,11 @@ namespace Junevy.EasyCamera.Vendors.HikVision
             return true;
         }
 
-        /// <summary>
-        /// 获取参数
-        /// </summary>
-        /// <typeparam name="T">参数类型，支持 int、long、float、string、bool</typeparam>
-        /// <param name="paramName">参数名</param>
-        /// <returns>
-        /// 参数值，类型不支持或相机不可用时返回 default(T)
-        /// </returns>
-        public T GetParam<T>(string paramName)
+        public bool TryGetParam<T>(string paramName, out T value)
         {
+            value = default;
             if (!this.IsConnected || string.IsNullOrEmpty(paramName))
-                return default;
+                return false;
 
             try
             {
@@ -610,43 +603,96 @@ namespace Junevy.EasyCamera.Vendors.HikVision
                 {
                     if (this.device.Parameters.GetIntValue(paramName, out IIntValue intValue) == MvError.MV_OK
                         && TryConvertToInt64ToInt32(intValue.CurValue, out var value32))
-                        return (T)(object)value32;
-                    return default;
+                    {
+                        value = (T)(object)value32;
+                        return true;
+                    }
+
+                    return false;
                 }
 
                 if (type == typeof(long))
                 {
-                    if (this.device.Parameters.GetIntValue(paramName, out IIntValue intValue) == MvError.MV_OK)
-                        return (T)(object)intValue.CurValue;
-                    return default;
+                    if (this.device.Parameters.GetIntValue(paramName, out IIntValue intValue64) == MvError.MV_OK)
+                    {
+                        value = (T)(object)intValue64.CurValue;
+                        return true;
+                    }
+
+                    return false;
                 }
 
                 if (type == typeof(float))
                 {
                     if (this.device.Parameters.GetFloatValue(paramName, out IFloatValue floatValue) == MvError.MV_OK)
-                        return (T)(object)floatValue.CurValue;
-                    return default;
+                    {
+                        value = (T)(object)floatValue.CurValue;
+                        return true;
+                    }
+
+                    return false;
                 }
 
                 if (type == typeof(string))
                 {
                     if (this.device.Parameters.GetStringValue(paramName, out IStringValue stringValue) == MvError.MV_OK)
-                        return (T)(object)(stringValue.CurValue ?? string.Empty);
-                    return default;
+                    {
+                        value = (T)(object)(stringValue.CurValue ?? string.Empty);
+                        return true;
+                    }
+
+                    return false;
                 }
 
                 if (type == typeof(bool))
                 {
                     if (this.device.Parameters.GetBoolValue(paramName, out bool boolValue) == MvError.MV_OK)
-                        return (T)(object)boolValue;
-                    return default;
+                    {
+                        value = (T)(object)boolValue;
+                        return true;
+                    }
+
+                    return false;
                 }
 
-                return default;
+                return false;
             }
             catch
             {
-                return default;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 获取参数
+        /// </summary>
+        /// <typeparam name="T">参数类型，支持 int、long、float、string、bool</typeparam>
+        /// <param name="paramName">参数名</param>
+        /// <returns>
+        /// 参数值，类型不支持或相机不可用时返回 default(T)
+        /// </returns>
+        public T GetParam<T>(string paramName)
+            => this.TryGetParam<T>(paramName, out var value) ? value : default;
+
+        public bool TryGetEnumParam(string paramName, out string value)
+        {
+            value = null;
+            if (!this.IsConnected || string.IsNullOrEmpty(paramName))
+                return false;
+
+            try
+            {
+                if (this.device.Parameters.GetEnumValue(paramName, out IEnumValue enumValue) == MvError.MV_OK)
+                {
+                    value = enumValue.CurEnumEntry?.Symbolic ?? string.Empty;
+                    return true;
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -658,22 +704,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// 枚举符号名，获取失败时返回空字符串
         /// </returns>
         public string GetEnumParam(string paramName)
-        {
-            if (!this.IsConnected || string.IsNullOrEmpty(paramName))
-                return string.Empty;
-
-            try
-            {
-                if (this.device.Parameters.GetEnumValue(paramName, out IEnumValue enumValue) == MvError.MV_OK)
-                    return enumValue.CurEnumEntry?.Symbolic ?? string.Empty;
-            }
-            catch
-            {
-                // 读取失败按“无值”处理
-            }
-
-            return string.Empty;
-        }
+            => this.TryGetEnumParam(paramName, out var value) ? value : string.Empty;
 
         /// <summary>
         /// 执行命令

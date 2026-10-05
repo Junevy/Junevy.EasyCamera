@@ -370,6 +370,15 @@ namespace Junevy.EasyCamera.Common
             }
         }
 
+        public bool TryGetParam<T>(string cameraKey, string paramName, out T value)
+        {
+            value = default;
+            if (!cameraManager.TryGet(cameraKey ?? "", out var camera) || !camera.IsConnected)
+                return false;
+
+            return camera.TryGetParam(paramName, out value);
+        }
+
         /// <summary>
         /// 获取相机的指定参数
         /// </summary>
@@ -379,11 +388,15 @@ namespace Junevy.EasyCamera.Common
         /// 参数值，相机不可用或类型不支持时返回 default(T)
         /// </returns>
         public T GetParam<T>(string cameraKey, string paramName)
-        {
-            if (!cameraManager.TryGet(cameraKey ?? "", out var camera) || !camera.IsConnected)
-                return default;
+            => this.TryGetParam<T>(cameraKey, paramName, out var value) ? value : default;
 
-            return camera.GetParam<T>(paramName);
+        public bool TryGetEnumParam(string cameraKey, string paramName, out string value)
+        {
+            value = null;
+            if (!cameraManager.TryGet(cameraKey ?? "", out var camera) || !camera.IsConnected)
+                return false;
+
+            return camera.TryGetEnumParam(paramName, out value);
         }
 
         /// <summary>
@@ -395,11 +408,6 @@ namespace Junevy.EasyCamera.Common
         /// 枚举符号名，相机不可用时返回空字符串
         /// </returns>
         public string GetEnumParam(string cameraKey, string paramName)
-        {
-            if (!cameraManager.TryGet(cameraKey ?? "", out var camera) || !camera.IsConnected)
-                return string.Empty;
-
-            return camera.GetEnumParam(paramName);
-        }
+            => this.TryGetEnumParam(cameraKey, paramName, out var value) ? value : string.Empty;
     }
 }

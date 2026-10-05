@@ -179,6 +179,17 @@ namespace Junevy.EasyCamera.Core.Common
         T GetParam<T>(string cameraKey, string paramName);
 
         /// <summary>
+        /// 尝试获取相机的指定参数，可区分"参数值恰为 default"与"获取失败"
+        /// </summary>
+        /// <param name="cameraKey">相机Key</param>
+        /// <param name="paramName">参数键</param>
+        /// <param name="value">获取成功时的参数值</param>
+        /// <returns>
+        /// 获取成功返回 <c>true</c>；相机不可用、参数名无效、类型不支持或读取失败返回 <c>false</c>
+        /// </returns>
+        bool TryGetParam<T>(string cameraKey, string paramName, out T value);
+
+        /// <summary>
         /// 获取相机的枚举参数符号名
         /// </summary>
         /// <param name="cameraKey">相机Key</param>
@@ -187,5 +198,8 @@ namespace Junevy.EasyCamera.Core.Common
         /// 枚举符号名，相机不可用时返回空字符串
         /// </returns>
         string GetEnumParam(string cameraKey, string paramName);
+
+        /// <summary>尝试获取相机的枚举参数符号名，语义同 <see cref="TryGetParam{T}" /></summary>
+        bool TryGetEnumParam(string cameraKey, string paramName, out string value);
     }
 }

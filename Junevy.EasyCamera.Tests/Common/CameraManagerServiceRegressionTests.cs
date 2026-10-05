@@ -110,6 +110,45 @@ namespace Junevy.EasyCamera.Tests.Common
             Assert.IsFalse(service.SubscribeFrameStream("key", "sub", (_, _) => Task.CompletedTask));
         }
 
+        [TestMethod]
+        public void CameraService_TryGetParam_UnavailableCamera_ReturnsFalse()
+        {
+            var provider = new TrackingProvider();
+            var manager = new CameraManager();
+            using var streams = new StreamManager();
+            var service = new CameraService(provider, manager, streams);
+
+            Assert.IsFalse(service.TryGetParam<int>("missing", "Width", out var value));
+            Assert.AreEqual(0, value);
+        }
+
+        [TestMethod]
+        public void CameraService_TryGetParam_ReportsFailureInsteadOfDefault()
+        {
+            var provider = new TrackingProvider { TryGetParamResult = false };
+            var manager = new CameraManager();
+            using var streams = new StreamManager();
+            var service = new CameraService(provider, manager, streams);
+
+            Assert.IsTrue(service.OpenCamera(new MockCameraInfo { SerialNumber = "SN001" }, "key").IsSuccess);
+
+            Assert.IsFalse(service.TryGetParam<int>("key", "Width", out _), "取参失败必须与 default 值可区分");
+        }
+
+        [TestMethod]
+        public void CameraService_TryGetParam_Success_ReturnsValue()
+        {
+            var provider = new TrackingProvider { TryGetParamValue = 42 };
+            var manager = new CameraManager();
+            using var streams = new StreamManager();
+            var service = new CameraService(provider, manager, streams);
+
+            Assert.IsTrue(service.OpenCamera(new MockCameraInfo { SerialNumber = "SN001" }, "key").IsSuccess);
+
+            Assert.IsTrue(service.TryGetParam<int>("key", "Width", out var value));
+            Assert.AreEqual(42, value);
+        }
+
         private sealed class DisposingStreamManager : IStreamManager
         {
             public ICameraStream GetOrCreateStream(string userDefinedName) => throw new ObjectDisposedException(nameof(StreamManager));
@@ -232,6 +271,8 @@ namespace Junevy.EasyCamera.Tests.Common
             public int CreateCount => this.CreatedCameras.Count;
             public CameraResult ConnectResult { get; set; } = CameraResult.Success(0);
             public CameraResult CloseResult { get; set; } = CameraResult.Success(0);
+            public bool TryGetParamResult { get; set; } = true;
+            public int TryGetParamValue { get; set; } = 42;
 
             public bool Supports(ICameraInfo info) => true;
 
@@ -240,7 +281,9 @@ namespace Junevy.EasyCamera.Tests.Common
                 var camera = new TrackingCamera
                 {
                     ConnectResult = this.ConnectResult,
-                    CloseResult = this.CloseResult
+                    CloseResult = this.CloseResult,
+                    TryGetParamResult = this.TryGetParamResult,
+                    TryGetParamValue = this.TryGetParamValue
                 };
                 this.CreatedCameras.Add(camera);
                 return camera;
@@ -255,6 +298,8 @@ namespace Junevy.EasyCamera.Tests.Common
         {
             public CameraResult ConnectResult { get; set; } = CameraResult.Success(0);
             public CameraResult CloseResult { get; set; } = CameraResult.Success(0);
+            public bool TryGetParamResult { get; set; } = true;
+            public int TryGetParamValue { get; set; } = 42;
             public bool IsConnected { get; private set; }
             public bool IsGrabbing { get; private set; }
             public bool IsDisposed { get; private set; }
@@ -290,6 +335,24 @@ namespace Junevy.EasyCamera.Tests.Common
             public CameraResult SetEnumParam(string paramName, string value) => CameraResult.Success(0);
             public T GetParam<T>(string paramName) => default;
             public string GetEnumParam(string paramName) => string.Empty;
+            public bool TryGetParam<T>(string paramName, out T value)
+            {
+                if (this.TryGetParamResult && typeof(T) == typeof(int))
+                {
+                    value = (T)(object)this.TryGetParamValue;
+                    return true;
+                }
+
+                value = default;
+                return false;
+            }
+
+            public bool TryGetEnumParam(string paramName, out string value)
+            {
+                value = null;
+                return false;
+            }
+
             public CameraResult ExecuteCommand(string command) => CameraResult.Success(0);
             public string GetSerialNumber() => "SN001";
             public void Dispose()

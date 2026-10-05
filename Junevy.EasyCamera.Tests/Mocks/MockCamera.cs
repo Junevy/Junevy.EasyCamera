@@ -61,9 +61,21 @@ namespace Junevy.EasyCamera.Tests.Mocks
             return default;
         }
 
+        public bool TryGetParam<T>(string paramName, out T value)
+        {
+            value = default;
+            return false;
+        }
+
         public string GetEnumParam(string paramName)
         {
             return string.Empty;
+        }
+
+        public bool TryGetEnumParam(string paramName, out string value)
+        {
+            value = null;
+            return false;
         }
 
         public CameraResult ExecuteCommand(string command)

@@ -120,6 +120,17 @@ namespace Junevy.EasyCamera.Core.Abstractions
         T GetParam<T>(string paramName);
 
         /// <summary>
+        /// 尝试获取参数。与 <see cref="GetParam{T}(string)" /> 不同，
+        /// 本方法可区分"参数值恰为 default"与"获取失败"。
+        /// </summary>
+        /// <param name="paramName">参数名</param>
+        /// <param name="value">获取成功时的参数值</param>
+        /// <returns>
+        /// 获取成功返回 <c>true</c>；相机不可用、参数名无效、类型不支持或读取失败返回 <c>false</c>
+        /// </returns>
+        bool TryGetParam<T>(string paramName, out T value);
+
+        /// <summary>
         /// 获取枚举参数的符号名
         /// </summary>
         /// <param name="paramName">参数名</param>
@@ -127,6 +138,9 @@ namespace Junevy.EasyCamera.Core.Abstractions
         /// 枚举符号名，获取失败时返回空字符串
         /// </returns>
         string GetEnumParam(string paramName);
+
+        /// <summary>尝试获取枚举参数符号名，语义同 <see cref="TryGetParam{T}" /></summary>
+        bool TryGetEnumParam(string paramName, out string value);
 
         /// <summary>
         /// 执行 Gige 命令

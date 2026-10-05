@@ -99,6 +99,53 @@ namespace Junevy.EasyCamera.Tests.Common
         }
 
         [TestMethod]
+        public void CameraService_SubscribeFrameStream_WhenStreamDisposedMidFlight_ReturnsFalse()
+        {
+            // GetStream 通过后、Subscribe 执行前流被释放的竞态窗口：
+            // 服务必须按 bool 契约返回 false，不得外泄 ObjectDisposedException
+            var provider = new TrackingProvider();
+            var manager = new CameraManager();
+            var service = new CameraService(provider, manager, new DisposingStreamManager());
+
+            Assert.IsFalse(service.SubscribeFrameStream("key", "sub", (_, _) => Task.CompletedTask));
+        }
+
+        private sealed class DisposingStreamManager : IStreamManager
+        {
+            public ICameraStream GetOrCreateStream(string userDefinedName) => throw new ObjectDisposedException(nameof(StreamManager));
+
+            public bool GetStream(string userDefinedName, out ICameraStream stream)
+            {
+                stream = new DisposedCameraStream();
+                return true;
+            }
+
+            public bool RemoveStream(string userDefinedName) => false;
+
+            public void Dispose()
+            {
+            }
+        }
+
+        private sealed class DisposedCameraStream : ICameraStream
+        {
+            public int SubscriberCount => 0;
+
+            public void Dispose()
+            {
+            }
+
+            public void Publish(IFrame frame)
+            {
+            }
+
+            public void Subscribe(string subberKey, int capacity, Func<string, IFrame, Task> handler, Action<Exception> whenException = null)
+                => throw new ObjectDisposedException(nameof(CameraStream));
+
+            public bool Unsubscribe(string subberKey) => false;
+        }
+
+        [TestMethod]
         public void CameraManager_Dispose_ClearsRegistryAndIsIdempotent()
         {
             var manager = new CameraManager();

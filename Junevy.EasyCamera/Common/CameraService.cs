@@ -127,8 +127,16 @@ namespace Junevy.EasyCamera.Common
             if (capacity <= 0)
                 capacity = this.streamOptions.StreamCapacity;
 
-            stream.Subscribe(subKey, capacity, processFrame, whenException);
-            return true;
+            try
+            {
+                stream.Subscribe(subKey, capacity, processFrame, whenException);
+                return true;
+            }
+            catch (ObjectDisposedException)
+            {
+                // 流随服务释放的竞态窗口：按"订阅失败"表达，不外泄异常
+                return false;
+            }
         }
 
         /// <summary>

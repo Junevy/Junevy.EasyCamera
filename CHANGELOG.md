@@ -7,6 +7,7 @@
 - **StreamManager**：补齐声明过但缺失的 disposed 防护——释放后 `GetOrCreateStream` 抛 `ObjectDisposedException`（与 Dispose 竞态时就地释放新建流，杜绝无人持有的流常驻）、`RemoveStream` 返回 false；新增回归测试。
 - **HikCameraSdkSystem**：Initialize 改为真按实例幂等（重复调用只持一个全局引用，此前每次调用都递增计数导致 SDK 永不 Finalize）；未 Initialize 的实例 `Release` 不再削减他人引用；全部引用计数转移在全局锁内完成，封死"并发 Initialize 与 Finalize 交叉"窗口；新增测试 seam（`Func<int>`）与 4 个回归测试。
 - **CompositeCameraSdkSystem**：`Initialize`/`Release` 增加异常隔离——单个厂商失败不中断其余厂商，全部处理完后以 `AggregateException` 汇报（与 `Dispose` 行为对齐）。
+- **CameraManager/CameraService**：`ICameraManager.TryRemove` 更名为 `Remove` 并返回新枚举 `CameraRemoveStatus`（Removed/NotFound/ReleaseFailed），`Close` 可精确区分"相机不存在"与"释放失败"；`LastError` 提升到接口并在成功清理后清空，消除陈旧错误；`CameraService.Close` 移除对具体类 `CameraManager` 的类型嗅探。
 
 ## 2026-09-15（稳定性全链路审查与修复）
 

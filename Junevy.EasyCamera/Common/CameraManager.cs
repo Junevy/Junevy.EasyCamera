@@ -60,7 +60,7 @@ namespace Junevy.EasyCamera.Common
             }
         }
 
-        public bool TryRemove(string cameraKey)
+        public CameraRemoveStatus Remove(string cameraKey)
         {
             if (string.IsNullOrEmpty(cameraKey))
                 throw new ArgumentNullException(nameof(cameraKey));
@@ -69,10 +69,10 @@ namespace Junevy.EasyCamera.Common
             lock (this.operateLock)
             {
                 if (this.disposed || !this.cameras.TryRemove(cameraKey, out camera))
-                    return false;
+                    return CameraRemoveStatus.NotFound;
             }
 
-            return DisposeCamera(camera);
+            return this.DisposeCamera(camera) ? CameraRemoveStatus.Removed : CameraRemoveStatus.ReleaseFailed;
         }
 
         public void Dispose()
@@ -126,7 +126,13 @@ namespace Junevy.EasyCamera.Common
                 error = string.IsNullOrEmpty(error) ? ex.Message : error + "; " + ex.Message;
             }
 
-            if (!success)
+            if (success)
+            {
+                // 成功清理后清空 LastError，避免陈旧错误误导后续诊断
+                lock (this.operateLock)
+                    this.lastError = null;
+            }
+            else
             {
                 lock (this.operateLock)
                     this.lastError = error;

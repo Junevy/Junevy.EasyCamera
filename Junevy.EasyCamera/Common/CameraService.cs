@@ -83,7 +83,7 @@ namespace Junevy.EasyCamera.Common
                     if (!result.IsSuccess && registered)
                     {
                         // Connect 失败的候选不应留在缓存中阻塞后续重试。
-                        cameraManager.TryRemove(cameraKey);
+                        this.cameraManager.Remove(cameraKey);
                     }
 
                     return result;
@@ -91,7 +91,7 @@ namespace Junevy.EasyCamera.Common
                 catch (Exception e)
                 {
                     if (registered)
-                        cameraManager.TryRemove(cameraKey);
+                        this.cameraManager.Remove(cameraKey);
                     else if (created)
                         DisposeCandidate(camera);
 
@@ -199,14 +199,12 @@ namespace Junevy.EasyCamera.Common
             if (string.IsNullOrEmpty(cameraKey))
                 return CameraResult.Fail(-1, "Camera key is empty");
 
-            if (this.cameraManager.TryRemove(cameraKey))
-                return CameraResult.Success(1);
-
-            if (this.cameraManager is CameraManager concrete
-                && !string.IsNullOrEmpty(concrete.LastError))
-                return CameraResult.Fail(-1, concrete.LastError);
-
-            return CameraResult.Fail(-1, "Dispose camera error");
+            return this.cameraManager.Remove(cameraKey) switch
+            {
+                CameraRemoveStatus.Removed => CameraResult.Success(0),
+                CameraRemoveStatus.NotFound => CameraResult.Fail(-1, ErrorMsg),
+                _ => CameraResult.Fail(-1, this.cameraManager.LastError ?? "Dispose camera error")
+            };
         }
 
         private static void DisposeCandidate(ICamera camera)

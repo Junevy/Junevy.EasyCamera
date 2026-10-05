@@ -14,18 +14,55 @@ namespace Junevy.EasyCamera.Tests.Common
     public class CameraManagerServiceRegressionTests
     {
         [TestMethod]
-        public void CameraManager_TryRemove_CloseFailure_ReturnsFalseButDisposesAndRemoves()
+        public void CameraManager_Remove_CloseFailure_ReturnsReleaseFailedButDisposesAndRemoves()
         {
             var manager = new CameraManager();
             var camera = new TrackingCamera { CloseResult = CameraResult.Fail(-9, "close failed") };
             manager.TryRegister("SN001", camera);
 
-            var result = manager.TryRemove("SN001");
+            var status = manager.Remove("SN001");
 
-            Assert.IsFalse(result);
+            Assert.AreEqual(CameraRemoveStatus.ReleaseFailed, status);
             Assert.IsTrue(camera.IsDisposed);
             Assert.IsFalse(manager.TryGet("SN001", out _));
             StringAssert.Contains(manager.LastError ?? string.Empty, "close failed");
+        }
+
+        [TestMethod]
+        public void CameraManager_Remove_MissingKey_ReturnsNotFound()
+        {
+            var manager = new CameraManager();
+
+            Assert.AreEqual(CameraRemoveStatus.NotFound, manager.Remove("missing"));
+        }
+
+        [TestMethod]
+        public void CameraManager_Remove_AfterFailedRemove_SucceedingRemoveClearsLastError()
+        {
+            var manager = new CameraManager();
+            var badCamera = new TrackingCamera { CloseResult = CameraResult.Fail(-9, "close failed") };
+            manager.TryRegister("bad", badCamera);
+            manager.Remove("bad");
+
+            var goodCamera = new TrackingCamera();
+            manager.TryRegister("good", goodCamera);
+
+            Assert.AreEqual(CameraRemoveStatus.Removed, manager.Remove("good"));
+            Assert.IsNull(manager.LastError, "成功清理后 LastError 必须清空，避免陈旧错误误导后续 Close");
+        }
+
+        [TestMethod]
+        public void CameraService_Close_UnknownKey_ReportsNotFound()
+        {
+            var provider = new TrackingProvider();
+            var manager = new CameraManager();
+            using var streams = new StreamManager();
+            var service = new CameraService(provider, manager, streams);
+
+            var result = service.Close("missing-key");
+
+            Assert.IsFalse(result.IsSuccess);
+            StringAssert.Contains(result.Message, "not open or found");
         }
 
         [TestMethod]

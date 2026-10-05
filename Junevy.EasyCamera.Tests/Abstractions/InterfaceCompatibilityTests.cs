@@ -1,4 +1,5 @@
 using Junevy.EasyCamera.Core.Abstractions;
+using Junevy.EasyCamera.Core.Common;
 using Junevy.EasyCamera.Common;
 using Junevy.EasyCamera.Tests.Mocks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -88,8 +89,8 @@ namespace Junevy.EasyCamera.Tests.Abstractions
             var camera = new MockCamera();
             cameraManager.TryRegister("SN_Remove", camera);
 
-            var result = cameraManager.TryRemove("SN_Remove");
-            Assert.IsTrue(result);
+            var result = cameraManager.Remove("SN_Remove");
+            Assert.AreEqual(CameraRemoveStatus.Removed, result);
             Assert.IsTrue(camera.IsDisposed);
 
             var found = cameraManager.TryGet("SN_Remove", out _);
@@ -100,8 +101,8 @@ namespace Junevy.EasyCamera.Tests.Abstractions
         public void CameraManager_RemoveMissingKey_ShouldReturnFalse()
         {
             var cameraManager = new CameraManager();
-            var result = cameraManager.TryRemove("SN_NotExist");
-            Assert.IsFalse(result);
+            var result = cameraManager.Remove("SN_NotExist");
+            Assert.AreEqual(CameraRemoveStatus.NotFound, result);
         }
 
         [TestMethod]
@@ -136,7 +137,7 @@ namespace Junevy.EasyCamera.Tests.Abstractions
         public void CameraManager_RemoveWithNull_ShouldThrow()
         {
             var cameraManager = new CameraManager();
-            try { cameraManager.TryRemove(null); Assert.Fail("Expected ArgumentNullException"); }
+            try { cameraManager.Remove(null); Assert.Fail("Expected ArgumentNullException"); }
             catch (System.ArgumentNullException) { }
         }
     }

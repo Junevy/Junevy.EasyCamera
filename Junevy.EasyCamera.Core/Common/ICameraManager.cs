@@ -33,11 +33,16 @@ namespace Junevy.EasyCamera.Core.Common
         /// </summary>
         /// <param name="cameraKey">相机序列号</param>
         /// <returns>
-        /// 是否成功移除相机实例
+        /// 移除结果状态；<see cref="CameraRemoveStatus.ReleaseFailed"/> 时诊断见 <see cref="LastError" />
         /// </returns>
         /// <exception cref="ArgumentNullException">
         /// <c>cameraKey</c> 为 <c>null</c>
         /// </exception>
-        bool TryRemove(string cameraKey);
+        CameraRemoveStatus Remove(string cameraKey);
+
+        /// <summary>
+        /// 最近一次清理失败的诊断信息；无失败时为 <c>null</c>，成功清理后清空
+        /// </summary>
+        string LastError { get; }
     }
 }

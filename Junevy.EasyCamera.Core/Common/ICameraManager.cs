@@ -13,6 +13,7 @@ namespace Junevy.EasyCamera.Core.Common
         /// </summary>
         /// <param name="cameraKey">相机序列号</param>
         /// <param name="camera">相机实例</param>
+        /// <returns>注册成功返回 <c>true</c>；<c>false</c> 表示该 cameraKey 已注册（保留现有实例，调用方应改用 <see cref="TryGet"/>）</returns>
         /// <exception cref="ArgumentNullException">
         /// <c>cameraKey</c> 或 <c>camera</c> 为 <c>null</c>
         /// </exception>

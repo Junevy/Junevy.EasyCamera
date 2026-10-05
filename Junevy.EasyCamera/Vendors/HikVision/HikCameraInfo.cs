@@ -71,7 +71,8 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         }
 
         /// <summary>
-        /// 设置用户自定义名称
+        /// 更新本信息对象的用户自定义名称（仅本地副本，不下发相机设备）。
+        /// 设备侧命名请通过相机参数接口设置（如海康 DeviceUserID）。
         /// </summary>
         /// <param name="name">自定义名称，长度不得超过64个字符</param>
         /// <returns>

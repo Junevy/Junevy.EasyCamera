@@ -17,9 +17,11 @@ namespace Junevy.EasyCamera.Core.Abstractions
         int SubscriberCount { get; }
 
         /// <summary>
-        /// 发布一帧图像
+        /// 发布一帧图像。
+        /// 发布方将帧的初始引用转移给流：流为每个成功入队的订阅者增加一个引用，
+        /// 并负责在消费、淘汰、取消或流释放时释放；Publish 返回后发布方不得再访问该帧。
         /// </summary>
-        /// <param name="frame">一帧图像，发布方保留初始引用，由流负责分发与释放</param>
+        /// <param name="frame">一帧图像，所有权随调用转移给流</param>
         void Publish(IFrame frame);
 
         /// <summary>

@@ -13,6 +13,7 @@
 - **HikCamera/IRaypleCamera**：`GetParam<int>` 增加 long→int 受检转换（`TryConvertToInt64ToInt32`），越界按"取值失败"返回 default，禁止静默回绕。
 - **HikFrameWrapper**：`Data` 改为懒缓存托管副本——SDK 的 `PixelData` 可能每次访问重新拷贝（5MB+/次），缓存后每帧至多一次；已释放帧返回已缓存副本（从未访问过则返回空数组），禁止触达已释放原生内存。
 - **HikCameraProvider**：设备枚举失败时输出 `Trace` 警告（含错误码），不再静默返回空集合。
+- **接口契约文档**：`ICameraStream.Publish` 注释修正为与实现一致的所有权转移语义；`ICameraManager.TryRegister` 注明 false=Key 已注册；`CameraResult.Code` 增加取值约定；`SetDefinedName` 注明仅更新本地副本不下发设备；修正 OpenCamera 错误消息与包描述拼写。
 
 ## 2026-09-15（稳定性全链路审查与修复）
 

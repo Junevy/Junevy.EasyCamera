@@ -49,7 +49,7 @@ namespace Junevy.EasyCamera.Common
         public CameraResult OpenCamera(ICameraInfo info, string cameraKey)
         {
             if (info == null || string.IsNullOrEmpty(cameraKey))
-                return CameraResult.Fail(-1, "The camera info or camerakey is null");
+                return CameraResult.Fail(-1, "The camera info or camera key is null");
 
             var keyLock = this.GetKeyLock(cameraKey);
             lock (keyLock)

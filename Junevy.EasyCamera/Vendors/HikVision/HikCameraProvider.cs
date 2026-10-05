@@ -3,6 +3,7 @@ using Junevy.EasyCamera.Common;
 using MvCameraControl;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Junevy.EasyCamera.Vendors.HikVision
 {
@@ -85,7 +86,11 @@ namespace Junevy.EasyCamera.Vendors.HikVision
             var result = DeviceEnumerator.EnumDevices(ToLayerType(type), out var deviceInfos);
 
             if (result != MvError.MV_OK || deviceInfos == null)
+            {
+                // 枚举失败目前只能以空集合表达；输出诊断便于现场排查设备缺失问题
+                Trace.TraceWarning($"HikCameraProvider.Enumerate failed with code {result}.");
                 yield break;
+            }
 
             foreach (var device in deviceInfos)
             {

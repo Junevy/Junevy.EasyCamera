@@ -12,6 +12,7 @@
 - **CameraService**：`StartGrab`/`StopGrab`/`SetTrigger` 统一使用 per-key 操作锁（此前仅 `StopGrab` 持服务级锁，互斥形同虚设）；`StartGrab` 改为幂等（已在取流时返回成功，与 `StopGrab` 一致）；成功结果 `Code` 归零（去除魔数 1），并约定成功 Code 恒为 0；`SubscribeFrameStream` 在流释放竞态下按契约返回 false，不再外泄 `ObjectDisposedException`。
 - **HikCamera/IRaypleCamera**：`GetParam<int>` 增加 long→int 受检转换（`TryConvertToInt64ToInt32`），越界按"取值失败"返回 default，禁止静默回绕。
 - **HikFrameWrapper**：`Data` 改为懒缓存托管副本——SDK 的 `PixelData` 可能每次访问重新拷贝（5MB+/次），缓存后每帧至多一次；已释放帧返回已缓存副本（从未访问过则返回空数组），禁止触达已释放原生内存。
+- **HikCameraProvider**：设备枚举失败时输出 `Trace` 警告（含错误码），不再静默返回空集合。
 
 ## 2026-09-15（稳定性全链路审查与修复）
 

@@ -55,14 +55,41 @@ namespace Junevy.EasyCamera.Tests.Abstractions
         }
 
         [TestMethod]
-        public void Subscribe_DuplicateKey_ShouldKeepSingleSubscriber()
+        public async Task Subscribe_DuplicateKey_ShouldReplaceSubscriberAtomically()
         {
             using var stream = new CameraStream("SN001");
+            var oldHandlerStarted = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var oldHandlerRelease = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var received = new TaskCompletionSource<IFrame>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-            stream.Subscribe("suber", 1, (name, frame) => Task.CompletedTask);
-            stream.Subscribe("suber", 1, (name, frame) => Task.CompletedTask);
+            // 旧订阅：handler 挂起占住 worker，模拟"旧订阅仍在消费"
+            stream.Subscribe("suber", 1, (_, _) =>
+            {
+                oldHandlerStarted.TrySetResult(null);
+                return oldHandlerRelease.Task;
+            });
+            stream.Publish(new MockFrame());
+            await oldHandlerStarted.Task;
+
+            // 重复订阅：必须原子替换
+            stream.Subscribe("suber", 1, (_, frame) =>
+            {
+                received.TrySetResult(frame);
+                return Task.CompletedTask;
+            });
 
             Assert.AreEqual(1, stream.SubscriberCount, "相同订阅Key必须被替换而不是重复注册");
+
+            oldHandlerRelease.TrySetResult(null);
+            var frame2 = new MockFrame();
+            stream.Publish(frame2);
+
+            var completed = await Task.WhenAny(received.Task, Task.Delay(5000));
+            Assert.AreSame(received.Task, completed, "替换后的订阅者必须接管后续帧投递");
+            Assert.AreSame(frame2, received.Task.Result);
+
+            received.Task.Result.Dispose();
+            stream.Unsubscribe("suber");
         }
 
         [TestMethod]

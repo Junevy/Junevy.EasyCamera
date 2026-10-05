@@ -68,10 +68,12 @@ namespace Junevy.EasyCamera.Common
                 },
                 frame => DisposeFrame(frame, whenException));
             var cts = new CancellationTokenSource();
-            CameraStreamSuber candidate = null;
-            var worker = Task.Run(() => ConsumeAsync(subberKey, candidate, channel, cts, handler, whenException));
-            candidate = new CameraStreamSuber(subberKey, channel, cts, worker);
 
+            // 先构造订阅者并启动 worker（实例经参数传入，无闭包时序依赖），再进入注册竞争
+            var candidate = new CameraStreamSuber(subberKey, channel, cts);
+            candidate.StartWorker(self => this.ConsumeAsync(subberKey, self, channel, cts, handler, whenException));
+
+            CameraStreamSuber replaced = null;
             bool accepted;
             lock (this.operationLock)
             {
@@ -81,21 +83,20 @@ namespace Junevy.EasyCamera.Common
                 }
                 else
                 {
-                    // TryAdd 在同一 key 的并发竞争中只允许一个候选成为有效订阅。
-                    accepted = this.subscribers.TryAdd(subberKey, candidate);
+                    // 替换语义：同 Key 重新订阅时原子替换旧订阅者，旧订阅者在锁外清理
+                    this.subscribers.TryRemove(subberKey, out replaced);
+                    this.subscribers[subberKey] = candidate;
+                    accepted = true;
                 }
             }
 
-            if (accepted)
-                return;
-
-            // 竞争失败或 Dispose 竞态产生的候选必须立即取消并释放自己的资源。
-            candidate.Dispose();
-            lock (this.operationLock)
+            if (!accepted)
             {
-                if (this.disposed == 1)
-                    throw new ObjectDisposedException(nameof(CameraStream));
+                candidate.Dispose();
+                throw new ObjectDisposedException(nameof(CameraStream));
             }
+
+            replaced?.Dispose();
         }
 
         public void Publish(IFrame frame)

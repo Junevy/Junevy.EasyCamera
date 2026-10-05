@@ -18,7 +18,7 @@ namespace Junevy.EasyCamera.Common
         private string lastError;
 
         /// <summary>
-        /// 最近一次清理失败的诊断信息。TryRemove 返回 false 时可据此定位原因。
+        /// 最近一次清理失败的诊断信息。Remove 返回 <see cref="CameraRemoveStatus.ReleaseFailed"/> 时可据此定位原因。
         /// </summary>
         public string LastError
         {

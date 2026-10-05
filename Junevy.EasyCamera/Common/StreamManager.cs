@@ -40,7 +40,7 @@ namespace Junevy.EasyCamera.Common
         /// <summary>
         /// 获取或创建指定的相机的图像数据流
         /// </summary>
-        /// <param name="cameraKey">相机自定义名称</param>
+        /// <param name="cameraKey">相机Key</param>
         /// <returns>
         /// 相机图像数据流
         /// </returns>
@@ -65,7 +65,7 @@ namespace Junevy.EasyCamera.Common
         /// <summary>
         /// 获取指定的相机的图像数据流
         /// </summary>
-        /// <param name="cameraKey">相机自定义名称</param>
+        /// <param name="cameraKey">相机Key</param>
         /// <param name="stream">相机图像数据流</param>
         /// <returns>
         /// 是否成功获取到图像数据流
@@ -86,7 +86,7 @@ namespace Junevy.EasyCamera.Common
         /// <summary>
         /// 移除并释放指定相机的图像数据流
         /// </summary>
-        /// <param name="cameraKey">相机自定义名称</param>
+        /// <param name="cameraKey">相机Key</param>
         /// <returns>
         /// 是否成功移除图像数据流
         /// </returns>

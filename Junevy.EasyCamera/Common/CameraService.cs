@@ -257,7 +257,7 @@ namespace Junevy.EasyCamera.Common
         }
 
         /// <summary>
-        /// 获取在线相机的序列号
+        /// 获取已注册（已打开）相机的序列号
         /// </summary>
         /// <param name="cameraKey">相机Key</param>
         /// <returns>

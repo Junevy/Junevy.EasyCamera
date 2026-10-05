@@ -9,6 +9,7 @@
 - **CompositeCameraSdkSystem**：`Initialize`/`Release` 增加异常隔离——单个厂商失败不中断其余厂商，全部处理完后以 `AggregateException` 汇报（与 `Dispose` 行为对齐）。
 - **CameraManager/CameraService**：`ICameraManager.TryRemove` 更名为 `Remove` 并返回新枚举 `CameraRemoveStatus`（Removed/NotFound/ReleaseFailed），`Close` 可精确区分"相机不存在"与"释放失败"；`LastError` 提升到接口并在成功清理后清空，消除陈旧错误；`CameraService.Close` 移除对具体类 `CameraManager` 的类型嗅探。
 - **CameraStream**：同 Key 重复订阅改为**原子替换旧订阅者**（此前静默丢弃新订阅且无任何信号，调用方误以为新 handler 生效）；`Subscribe` 改为先构造订阅者再启动 worker（实例经参数传入工厂），消除"闭包读取尚未赋值局部变量"的时序依赖；`CameraStreamSuber` 增加 `StartWorker`/`Worker`，CTS 释放兜底幂等化。
+- **CameraService**：`StartGrab`/`StopGrab`/`SetTrigger` 统一使用 per-key 操作锁（此前仅 `StopGrab` 持服务级锁，互斥形同虚设）；`StartGrab` 改为幂等（已在取流时返回成功，与 `StopGrab` 一致）；成功结果 `Code` 归零（去除魔数 1），并约定成功 Code 恒为 0。
 
 ## 2026-09-15（稳定性全链路审查与修复）
 

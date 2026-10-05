@@ -66,6 +66,39 @@ namespace Junevy.EasyCamera.Tests.Common
         }
 
         [TestMethod]
+        public void CameraService_StartGrab_AlreadyGrabbing_ReturnsSuccess()
+        {
+            var provider = new TrackingProvider();
+            var manager = new CameraManager();
+            using var streams = new StreamManager();
+            var service = new CameraService(provider, manager, streams);
+
+            Assert.IsTrue(service.OpenCamera(new MockCameraInfo { SerialNumber = "SN001" }, "key").IsSuccess);
+            Assert.IsTrue(service.StartGrab("key").IsSuccess);
+
+            var second = service.StartGrab("key");
+
+            Assert.IsTrue(second.IsSuccess, "StartGrab 必须幂等，与 StopGrab 风格一致");
+        }
+
+        [TestMethod]
+        public void CameraService_StopGrab_SuccessCodeIsZero()
+        {
+            var provider = new TrackingProvider();
+            var manager = new CameraManager();
+            using var streams = new StreamManager();
+            var service = new CameraService(provider, manager, streams);
+
+            Assert.IsTrue(service.OpenCamera(new MockCameraInfo { SerialNumber = "SN001" }, "key").IsSuccess);
+            Assert.IsTrue(service.StartGrab("key").IsSuccess);
+
+            var result = service.StopGrab("key");
+
+            Assert.IsTrue(result.IsSuccess);
+            Assert.AreEqual(0, result.Code, "成功结果 Code 约定为 0，不得使用魔数 1");
+        }
+
+        [TestMethod]
         public void CameraManager_Dispose_ClearsRegistryAndIsIdempotent()
         {
             var manager = new CameraManager();
@@ -195,6 +228,9 @@ namespace Junevy.EasyCamera.Tests.Common
 
             public CameraResult StartGrab()
             {
+                // 与真实厂商相机（如 HikCamera）一致：重复取流在相机层返回失败
+                if (this.IsGrabbing)
+                    return CameraResult.Fail(-1, "Camera is already grabbing");
                 this.IsGrabbing = true;
                 return CameraResult.Success(0);
             }

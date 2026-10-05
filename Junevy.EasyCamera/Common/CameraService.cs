@@ -13,13 +13,19 @@ namespace Junevy.EasyCamera.Common
     public class CameraService(ICameraProvider provider, ICameraManager cameraManager, IStreamManager streamManager, StreamOptions streamOptions = null) : ICameraService
     {
         private const string ErrorMsg = "Camera not open or found";
-        private readonly object locker = new();
-        private readonly ConcurrentDictionary<string, object> cameraOpenLocks = new();
+        private readonly ConcurrentDictionary<string, object> cameraKeyLocks = new();
 
         private readonly ICameraProvider provider = provider;
         private readonly ICameraManager cameraManager = cameraManager;
         private readonly IStreamManager streamManager = streamManager;
         private readonly StreamOptions streamOptions = streamOptions ?? new StreamOptions();
+
+        /// <summary>
+        /// 相机 key 级操作锁：OpenCamera/StartGrab/StopGrab/SetTrigger 按 key 串行。
+        /// 锁对象按 key 只增不减：key 数量量级 ≈ 相机数（小且稳定），可接受；
+        /// 按引用计数删除会在 Close/Open 竞态窗口重开两个锁对象，得不偿失。
+        /// </summary>
+        private object GetKeyLock(string cameraKey) => this.cameraKeyLocks.GetOrAdd(cameraKey, _ => new object());
 
         /// <summary>
         /// 枚举相机
@@ -45,7 +51,7 @@ namespace Junevy.EasyCamera.Common
             if (info == null || string.IsNullOrEmpty(cameraKey))
                 return CameraResult.Fail(-1, "The camera info or camerakey is null");
 
-            var keyLock = this.cameraOpenLocks.GetOrAdd(cameraKey, _ => new object());
+            var keyLock = this.GetKeyLock(cameraKey);
             lock (keyLock)
             {
                 ICamera camera = null;
@@ -151,17 +157,27 @@ namespace Junevy.EasyCamera.Common
         /// </returns>
         public CameraResult StartGrab(string cameraKey)
         {
-            if (!cameraManager.TryGet(cameraKey ?? "", out var camera) || !camera.IsConnected)
+            if (string.IsNullOrEmpty(cameraKey))
                 return CameraResult.Fail(-1, ErrorMsg);
 
-            try
+            lock (this.GetKeyLock(cameraKey))
             {
-                return camera.StartGrab();
-            }
-            catch (Exception e)
-            {
-                camera?.StopGrab();
-                return CameraResult.Fail(-2, e.Message);
+                if (!cameraManager.TryGet(cameraKey, out var camera) || !camera.IsConnected)
+                    return CameraResult.Fail(-1, ErrorMsg);
+
+                // 幂等：已在取流时直接成功，与 StopGrab 的幂等风格一致
+                if (camera.IsGrabbing)
+                    return CameraResult.Success(0);
+
+                try
+                {
+                    return camera.StartGrab();
+                }
+                catch (Exception e)
+                {
+                    camera?.StopGrab();
+                    return CameraResult.Fail(-2, e.Message);
+                }
             }
         }
 
@@ -174,15 +190,18 @@ namespace Junevy.EasyCamera.Common
         /// </returns>
         public CameraResult StopGrab(string cameraKey)
         {
-            lock(locker)
+            if (string.IsNullOrEmpty(cameraKey))
+                return CameraResult.Fail(-1, ErrorMsg);
+
+            lock (this.GetKeyLock(cameraKey))
             {
-                if (!cameraManager.TryGet(cameraKey ?? "", out var camera) || !camera.IsConnected)
+                if (!cameraManager.TryGet(cameraKey, out var camera) || !camera.IsConnected)
                     return CameraResult.Fail(-1, ErrorMsg);
 
                 camera.StopGrab();
                 return camera.IsGrabbing
                     ? CameraResult.Fail(-1, "Camera stop grabbing failed")
-                    : CameraResult.Success(1);
+                    : CameraResult.Success(0);
             }
         }
 
@@ -320,21 +339,27 @@ namespace Junevy.EasyCamera.Common
         /// </returns>
         public CameraResult SetTrigger(string cameraKey, string triggerWay, bool isAcquisition)
         {
-            if (!cameraManager.TryGet(cameraKey ?? "", out var camera) || !camera.IsConnected)
+            if (string.IsNullOrEmpty(cameraKey))
                 return CameraResult.Fail(-1, ErrorMsg);
 
-            if (string.IsNullOrEmpty(triggerWay))
-                return CameraResult.Fail(-1, "Check the trigger source or trigger way");
+            lock (this.GetKeyLock(cameraKey))
+            {
+                if (!cameraManager.TryGet(cameraKey, out var camera) || !camera.IsConnected)
+                    return CameraResult.Fail(-1, ErrorMsg);
 
-            camera.StopGrab();
-            if (camera.IsGrabbing)
-                return CameraResult.Fail(-1, "Camera stop grabbing failed");
+                if (string.IsNullOrEmpty(triggerWay))
+                    return CameraResult.Fail(-1, "Check the trigger source or trigger way");
 
-            string acq = isAcquisition ? "On" : "Off";
-            var acqResult = camera.SetEnumParam("TriggerMode", acq);
-            if (!acqResult.IsSuccess) return acqResult;
+                camera.StopGrab();
+                if (camera.IsGrabbing)
+                    return CameraResult.Fail(-1, "Camera stop grabbing failed");
 
-            return camera.SetEnumParam("TriggerSource", triggerWay);
+                string acq = isAcquisition ? "On" : "Off";
+                var acqResult = camera.SetEnumParam("TriggerMode", acq);
+                if (!acqResult.IsSuccess) return acqResult;
+
+                return camera.SetEnumParam("TriggerSource", triggerWay);
+            }
         }
 
         /// <summary>

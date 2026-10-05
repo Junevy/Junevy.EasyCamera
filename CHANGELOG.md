@@ -18,6 +18,7 @@
 - **公共 API 命名修正（破坏性，v1.0.0 未对外发布）**：`CameraStreamSuber`→`CameraStreamSubscriber`（参数 `subberKey`→`subscriberKey`，属性 `Suber`→`Worker`）；`CameraType`→`CameraInterfaceType`（枚举成员 `ALL`→`All`，该枚举表达物理接口类型而非品牌）；`GetOnlineCameraSerialNumber`→`GetSerialNumber`（返回已注册相机序列号，与"在线"无关）；`SetTrigger(triggerWay, isAcquisition)`→`SetTrigger(triggerSource, enableTrigger)`；帧流键统一命名 `cameraKey`（原 `userDefinedName`）；`CameraManager.operateLock`→`operationLock`、`HikCamera.locker`→`stateLock`；Core 命名空间注册类更名 `CoreServiceCollectionExtensions`（扩展方法调用点不受影响）。
 - **文档**：新增 `README.md`（项目现状/快速上手/推荐用法/帧资源管理约定）；`AGENTS.md` 第 4 节同步更新公共契约要点与帧分发模型澄清。
 - **新增 Agent 技能**：`skills/using-junevy-easycamera/SKILL.md`——面向消费本 NuGet 包的其他 Agent 的使用说明书（环境要求、命名空间、DI 快速上手、帧生命周期规则、API 速查、常见错误与故障速查）。经两轮子代理 TDD 验证：仅凭该技能文件即可产出签名与生命周期全部正确的接入代码。
+- **新增非 DI 入口（Builder）**：`EasyCamera.Create(b => b.EnableHikVision().WithStreamOptions(...))` / `EasyCameraBuilder` / `EasyCameraHost`——不依赖 Microsoft.Extensions.DependencyInjection 的一行式组装，适配 Prism 等自带容器的框架（将 `host.Sdk`/`host.Service` 以单例实例注册进宿主容器）；`host.Dispose()` 幂等并保证"相机 → 帧流 → SDK"的释放顺序；启用未实现厂商与 DI 路径一致抛 `NotImplementedException`，未启用任何厂商抛 `InvalidOperationException`。SKILL/README 同步新增 Prism 接入章节。
 - 验收：`dotnet build`（sln，Release）0 错误；`dotnet test` net48 84/84、net8.0 84/84 全部通过（基线 63 + 新增 21）。
 
 ## 2026-09-15（稳定性全链路审查与修复）

@@ -75,17 +75,21 @@ finally
 }
 ```
 
-## 简易使用（手动构造，不依赖 DI）
+## 简易使用（Builder，不依赖 DI）
 
 ```csharp
-using var streams = new StreamManager();
-var service = new CameraService(
-    new AggregateCameraProvider(new IVendorCameraProvider[] { new HikCameraProvider() }),
-    new CameraManager(),
-    streams,
-    new StreamOptions());
-// 后续步骤与 DI 方式的 3–6 步相同
+using Junevy.EasyCamera;
+
+using var host = EasyCamera.Create(b => b.EnableHikVision()
+                                             .WithStreamOptions(o => o.StreamCapacity = 5));
+host.Sdk.Initialize();
+// host.Service 用法与 DI 方式的 3–6 步相同
+host.Dispose();   // 幂等；释放顺序：相机 → 帧流 → SDK
 ```
+
+### Prism 等自带容器框架
+
+把 `host.Sdk` / `host.Service` 以**单例实例**注册进宿主容器（`IContainerRegistry.RegisterInstance`，切勿注册成瞬态），之后 ViewModel 构造函数注入 `ICameraService` 照常工作；完整模式见 [skills/using-junevy-easycamera/SKILL.md](skills/using-junevy-easycamera/SKILL.md)。若你的 Prism 底层本就是 Microsoft.Extensions.DependencyInjection（官方适配包），直接 `services.AddEasyCamera(...)` 即可。
 
 ## 帧与资源管理约定（重要）
 

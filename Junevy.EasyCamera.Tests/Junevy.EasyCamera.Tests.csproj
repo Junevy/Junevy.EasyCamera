@@ -55,6 +55,7 @@
     <Compile Include="Common\CompositeCameraSdkSystemTests.cs" />
     <Compile Include="Common\CameraManagerServiceRegressionTests.cs" />
     <Compile Include="Common\StreamManagerTests.cs" />
+    <Compile Include="Common\EasyCameraBuilderTests.cs" />
     <Compile Include="Extensions\ServiceCollectionExtensionsTests.cs" />
     <Compile Include="Mocks\FakeCameraInfo.cs" />
     <Compile Include="Mocks\FakeVendorProvider.cs" />

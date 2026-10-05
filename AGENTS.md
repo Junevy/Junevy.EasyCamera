@@ -39,6 +39,7 @@ HikVision 与公共层的资源所有权约束：SDK 回调帧必须在回调内
 - 帧流订阅者为 `CameraStreamSubscriber`（原 `CameraStreamSuber`），订阅参数名 `subscriberKey`；同 Key 重复订阅为**原子替换**语义。
 - `ICameraManager.Remove` 返回 `CameraRemoveStatus`（Removed/NotFound/ReleaseFailed），`LastError` 已提升到接口并在成功清理后清空。
 - 取参推荐 `TryGetParam<T>`/`TryGetEnumParam`（可区分"值恰为 default"与"获取失败"）；`SetTrigger(cameraKey, triggerSource, enableTrigger)`；`HikFrameWrapper.Data` 为懒缓存托管副本。
+- 非 DI 场景入口：`EasyCamera.Create(b => b.EnableHikVision()...)` 返回 `EasyCameraHost`（持有 `Sdk`/`Service`/`Options`，`Dispose` 幂等并按"相机→帧流→SDK"顺序释放）；Prism 等宿主容器以单例实例注册 `host.Sdk`/`host.Service`，勿注册为瞬态。
 - SDK Initialize/Finalize 由 `HikCameraSdkSystem` 按实例引用计数管理（含 internal 测试 seam，经 `InternalsVisibleTo` 供无硬件单测使用）。
 - 项目入口文档为根目录 `README.md`（现状/快速上手/推荐用法）。
 - 面向消费方 Agent 的包使用说明书位于 `skills/using-junevy-easycamera/SKILL.md`（可复制到任意 Agent 运行时的技能目录使用）；修改公共 API 后必须同步更新该文件。

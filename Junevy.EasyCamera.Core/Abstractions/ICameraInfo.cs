@@ -15,6 +15,6 @@ namespace Junevy.EasyCamera.Core.Abstractions
 
         string CameraVersion { get; }
 
-        CameraType InterfaceType { get; }
+        CameraInterfaceType InterfaceType { get; }
     }
 }

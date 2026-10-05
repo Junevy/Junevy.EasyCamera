@@ -12,7 +12,7 @@ namespace Junevy.EasyCamera.Common
     /// </summary>
     public class CameraManager : ICameraManager
     {
-        private readonly object operateLock = new();
+        private readonly object operationLock = new();
         private readonly ConcurrentDictionary<string, ICamera> cameras = new();
         private bool disposed;
         private string lastError;
@@ -24,7 +24,7 @@ namespace Junevy.EasyCamera.Common
         {
             get
             {
-                lock (this.operateLock)
+                lock (this.operationLock)
                     return this.lastError;
             }
         }
@@ -36,7 +36,7 @@ namespace Junevy.EasyCamera.Common
             if (camera == null)
                 throw new ArgumentNullException(nameof(camera));
 
-            lock (this.operateLock)
+            lock (this.operationLock)
             {
                 if (this.disposed)
                     throw new ObjectDisposedException(nameof(CameraManager));
@@ -51,7 +51,7 @@ namespace Junevy.EasyCamera.Common
             if (string.IsNullOrEmpty(cameraKey))
                 return false;
 
-            lock (this.operateLock)
+            lock (this.operationLock)
             {
                 if (this.disposed)
                     return false;
@@ -66,7 +66,7 @@ namespace Junevy.EasyCamera.Common
                 throw new ArgumentNullException(nameof(cameraKey));
 
             ICamera camera;
-            lock (this.operateLock)
+            lock (this.operationLock)
             {
                 if (this.disposed || !this.cameras.TryRemove(cameraKey, out camera))
                     return CameraRemoveStatus.NotFound;
@@ -78,7 +78,7 @@ namespace Junevy.EasyCamera.Common
         public void Dispose()
         {
             ICamera[] snapshot;
-            lock (this.operateLock)
+            lock (this.operationLock)
             {
                 if (this.disposed)
                     return;
@@ -129,12 +129,12 @@ namespace Junevy.EasyCamera.Common
             if (success)
             {
                 // 成功清理后清空 LastError，避免陈旧错误误导后续诊断
-                lock (this.operateLock)
+                lock (this.operationLock)
                     this.lastError = null;
             }
             else
             {
-                lock (this.operateLock)
+                lock (this.operationLock)
                     this.lastError = error;
             }
 

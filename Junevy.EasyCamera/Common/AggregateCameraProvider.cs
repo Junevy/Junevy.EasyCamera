@@ -71,7 +71,7 @@ namespace Junevy.EasyCamera.Common
         /// </returns>
         public IEnumerable<ICameraInfo> Enumerate()
         {
-            return Enumerate(CameraType.ALL);
+            return Enumerate(CameraInterfaceType.All);
         }
 
         /// <summary>
@@ -81,7 +81,7 @@ namespace Junevy.EasyCamera.Common
         /// <returns>
         /// 相机信息列表
         /// </returns>
-        public IEnumerable<ICameraInfo> Enumerate(CameraType type)
+        public IEnumerable<ICameraInfo> Enumerate(CameraInterfaceType type)
         {
             return this.vendors.SelectMany(v => v.Enumerate(type));
         }

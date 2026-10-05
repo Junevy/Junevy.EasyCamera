@@ -40,7 +40,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// <value>
         /// 相机接口类型
         /// </value>
-        public CameraType InterfaceType => this.GetCameraType();
+        public CameraInterfaceType InterfaceType => this.GetCameraType();
 
         /// <summary>
         /// 海康原生设备信息，仅供程序集内部创建相机实例使用
@@ -96,23 +96,23 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// <returns>
         /// 相机接口类型
         /// </returns>
-        private CameraType GetCameraType()
+        private CameraInterfaceType GetCameraType()
         {
             if (this.Native == null)
-                return CameraType.Unknown;
+                return CameraInterfaceType.Unknown;
 
             return this.Native.TLayerType switch
             {
-                DeviceTLayerType.MvGigEDevice => CameraType.GigE,
-                DeviceTLayerType.MvVirGigEDevice => CameraType.GigE,
-                DeviceTLayerType.MvUsbDevice => CameraType.Usb,
-                DeviceTLayerType.MvVirUsbDevice => CameraType.Usb,
-                DeviceTLayerType.MvCameraLinkDevice => CameraType.CameraLink,
-                DeviceTLayerType.MvGenTLGigEDevice => CameraType.GenTL,
-                DeviceTLayerType.MvGenTLCameraLinkDevice => CameraType.GenTL,
-                DeviceTLayerType.MvGenTLCXPDevice => CameraType.GenTL,
-                DeviceTLayerType.MvGenTLXoFDevice => CameraType.GenTL,
-                _ => CameraType.Unknown,
+                DeviceTLayerType.MvGigEDevice => CameraInterfaceType.GigE,
+                DeviceTLayerType.MvVirGigEDevice => CameraInterfaceType.GigE,
+                DeviceTLayerType.MvUsbDevice => CameraInterfaceType.Usb,
+                DeviceTLayerType.MvVirUsbDevice => CameraInterfaceType.Usb,
+                DeviceTLayerType.MvCameraLinkDevice => CameraInterfaceType.CameraLink,
+                DeviceTLayerType.MvGenTLGigEDevice => CameraInterfaceType.GenTL,
+                DeviceTLayerType.MvGenTLCameraLinkDevice => CameraInterfaceType.GenTL,
+                DeviceTLayerType.MvGenTLCXPDevice => CameraInterfaceType.GenTL,
+                DeviceTLayerType.MvGenTLXoFDevice => CameraInterfaceType.GenTL,
+                _ => CameraInterfaceType.Unknown,
             };
         }
     }

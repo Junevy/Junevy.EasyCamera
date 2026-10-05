@@ -107,9 +107,9 @@ namespace Junevy.EasyCamera.Tests.Vendors.HikVision
                 "ToLayerType", BindingFlags.NonPublic | BindingFlags.Static);
             Assert.IsNotNull(method);
 
-            var genTl = (DeviceTLayerType)method.Invoke(null, new object[] { CameraType.GenTL });
-            var all = (DeviceTLayerType)method.Invoke(null, new object[] { CameraType.ALL });
-            var unknown = (DeviceTLayerType)method.Invoke(null, new object[] { CameraType.Unknown });
+            var genTl = (DeviceTLayerType)method.Invoke(null, new object[] { CameraInterfaceType.GenTL });
+            var all = (DeviceTLayerType)method.Invoke(null, new object[] { CameraInterfaceType.All });
+            var unknown = (DeviceTLayerType)method.Invoke(null, new object[] { CameraInterfaceType.Unknown });
 
             Assert.AreEqual(
                 DeviceTLayerType.MvGenTLGigEDevice
@@ -185,11 +185,11 @@ namespace Junevy.EasyCamera.Tests.Vendors.HikVision
 
             public virtual void Publish(IFrame frame) => frame.Dispose();
 
-            public void Subscribe(string subberKey, int capacity, Func<string, IFrame, Task> handler, Action<Exception> whenException = null)
+            public void Subscribe(string subscriberKey, int capacity, Func<string, IFrame, Task> handler, Action<Exception> whenException = null)
             {
             }
 
-            public bool Unsubscribe(string subberKey) => false;
+            public bool Unsubscribe(string subscriberKey) => false;
         }
 
         private sealed class ThrowingStream : RecordingStream

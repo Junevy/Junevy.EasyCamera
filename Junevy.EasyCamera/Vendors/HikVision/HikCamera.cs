@@ -10,7 +10,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
     /// </summary>
     public class HikCamera : ICamera
     {
-        private readonly object locker = new();
+        private readonly object stateLock = new();
         private readonly SemaphoreSlim operationGate = new(1, 1);
         private readonly Func<IDeviceInfo, IDevice> deviceFactory;
 
@@ -84,7 +84,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         {
             get
             {
-                lock (this.locker)
+                lock (this.stateLock)
                     return this.lastError;
             }
         }
@@ -134,7 +134,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
             {
                 IDevice currentDevice;
                 IStreamGrabber currentGrabber;
-                lock (this.locker)
+                lock (this.stateLock)
                 {
                     if (this.disposed == 1)
                         return CameraResult.Fail(-1, "The camera has been disposed");
@@ -160,7 +160,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
                     return CameraResult.Fail(-1, "Open camera failed");
                 }
 
-                lock (this.locker)
+                lock (this.stateLock)
                 {
                     this.streamGrabber = currentGrabber;
                     this.isOpen = 1;
@@ -184,7 +184,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
                 }
                 catch (Exception e)
                 {
-                    lock (this.locker)
+                    lock (this.stateLock)
                     {
                         this.callbacksEnabled = false;
                         this.isOpen = 0;
@@ -232,7 +232,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
             {
                 IDevice currentDevice;
                 IStreamGrabber currentGrabber;
-                lock (this.locker)
+                lock (this.stateLock)
                 {
                     if (this.disposed == 1)
                         return CameraResult.Fail(-1, "Camera has been disposed");
@@ -260,7 +260,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
                 if (!stopResult.IsSuccess)
                 {
                     this.RestoreCallbackSubscription(currentGrabber);
-                    lock (this.locker)
+                    lock (this.stateLock)
                     {
                         this.closing = false;
                         this.callbacksEnabled = true;
@@ -276,7 +276,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
                 {
                     this.SetLastError($"Close camera failed with error code {closeCode}.");
                     this.RestoreCallbackSubscription(currentGrabber);
-                    lock (this.locker)
+                    lock (this.stateLock)
                     {
                         this.closing = false;
                         this.callbacksEnabled = true;
@@ -285,7 +285,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
                     return CameraResult.Fail(closeCode, "Close camera failed");
                 }
 
-                lock (this.locker)
+                lock (this.stateLock)
                 {
                     this.isOpen = 0;
                     this.isGrabbing = 0;
@@ -323,7 +323,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
             try
             {
                 IStreamGrabber currentGrabber;
-                lock (this.locker)
+                lock (this.stateLock)
                 {
                     if (this.disposed == 1)
                         return CameraResult.Fail(-1, "The camera has been disposed");
@@ -375,7 +375,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
             try
             {
                 IStreamGrabber currentGrabber;
-                lock (this.locker)
+                lock (this.stateLock)
                 {
                     if (Volatile.Read(ref this.isGrabbing) == 0)
                         return;
@@ -734,7 +734,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
             {
                 IDevice currentDevice;
                 IStreamGrabber currentGrabber;
-                lock (this.locker)
+                lock (this.stateLock)
                 {
                     if (this.disposed == 1)
                         return;
@@ -782,7 +782,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
                     this.SetLastError(e.Message);
                 }
 
-                lock (this.locker)
+                lock (this.stateLock)
                 {
                     this.device = null;
                     this.streamGrabber = null;
@@ -811,7 +811,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
             var callbackGrabber = sender as IStreamGrabber;
             bool shouldPublish;
             IStreamGrabber fallbackGrabber;
-            lock (this.locker)
+            lock (this.stateLock)
             {
                 this.inFlightCallbacks++;
                 shouldPublish = this.callbacksEnabled
@@ -855,13 +855,13 @@ namespace Junevy.EasyCamera.Vendors.HikVision
                 }
                 finally
                 {
-                    lock (this.locker)
+                    lock (this.stateLock)
                     {
                         this.inFlightCallbacks--;
                         if (this.inFlightCallbacks <= 0)
                         {
                             this.inFlightCallbacks = 0;
-                            Monitor.PulseAll(this.locker);
+                            Monitor.PulseAll(this.stateLock);
                         }
                     }
                 }
@@ -874,13 +874,13 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// </summary>
         private void WaitForCallbacks()
         {
-            lock (this.locker)
+            lock (this.stateLock)
             {
                 var deadline = DateTime.UtcNow + CallbackDrainTimeout;
                 while (this.inFlightCallbacks > 0)
                 {
                     var remaining = deadline - DateTime.UtcNow;
-                    if (remaining <= TimeSpan.Zero || !Monitor.Wait(this.locker, remaining))
+                    if (remaining <= TimeSpan.Zero || !Monitor.Wait(this.stateLock, remaining))
                     {
                         this.SetLastError(
                             $"Timed out waiting for {this.inFlightCallbacks} in-flight frame callback(s) to drain.");
@@ -911,7 +911,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
 
         private void SetLastError(string message)
         {
-            lock (this.locker)
+            lock (this.stateLock)
                 this.lastError = message;
         }
 

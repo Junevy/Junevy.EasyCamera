@@ -44,6 +44,6 @@ namespace Junevy.EasyCamera.Core.Abstractions
         /// <returns>
         /// 相机信息列表
         /// </returns>
-        IEnumerable<ICameraInfo> Enumerate(CameraType type);
+        IEnumerable<ICameraInfo> Enumerate(CameraInterfaceType type);
     }
 }

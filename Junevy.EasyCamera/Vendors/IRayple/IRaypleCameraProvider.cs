@@ -74,7 +74,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// <returns>
         /// 相机信息列表
         /// </returns>
-        public IEnumerable<ICameraInfo> Enumerate() => this.Enumerate(CameraType.ALL);
+        public IEnumerable<ICameraInfo> Enumerate() => this.Enumerate(CameraInterfaceType.All);
 
         /// <summary>
         /// 枚举指定接口类型的相机信息
@@ -83,7 +83,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// <returns>
         /// 相机信息列表
         /// </returns>
-        public IEnumerable<ICameraInfo> Enumerate(CameraType type)
+        public IEnumerable<ICameraInfo> Enumerate(CameraInterfaceType type)
         {
             var deviceList = new IMV_DeviceList();
             var result = MyCamera.IMV_EnumDevices(ref deviceList, (uint)ToInterfaceType(type));
@@ -140,14 +140,14 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// <returns>
         /// Irayple接口类型
         /// </returns>
-        private static IMV_EInterfaceType ToInterfaceType(CameraType type)
+        private static IMV_EInterfaceType ToInterfaceType(CameraInterfaceType type)
         {
             return type switch
             {
-                CameraType.GigE => IMV_EInterfaceType.interfaceTypeGige,
-                CameraType.Usb => IMV_EInterfaceType.interfaceTypeUsb3,
-                CameraType.CameraLink => IMV_EInterfaceType.interfaceTypeCL,
-                CameraType.GenTL => IMV_EInterfaceType.interfaceTypePCIe,
+                CameraInterfaceType.GigE => IMV_EInterfaceType.interfaceTypeGige,
+                CameraInterfaceType.Usb => IMV_EInterfaceType.interfaceTypeUsb3,
+                CameraInterfaceType.CameraLink => IMV_EInterfaceType.interfaceTypeCL,
+                CameraInterfaceType.GenTL => IMV_EInterfaceType.interfaceTypePCIe,
                 _ => IMV_EInterfaceType.interfaceTypeAll
             };
         }

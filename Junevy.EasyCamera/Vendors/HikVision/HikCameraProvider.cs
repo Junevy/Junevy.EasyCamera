@@ -72,7 +72,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// <returns>
         /// 相机信息列表
         /// </returns>
-        public IEnumerable<ICameraInfo> Enumerate() => this.Enumerate(CameraType.ALL);
+        public IEnumerable<ICameraInfo> Enumerate() => this.Enumerate(CameraInterfaceType.All);
 
         /// <summary>
         /// 枚举指定接口类型的相机信息
@@ -81,7 +81,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// <returns>
         /// 相机信息列表
         /// </returns>
-        public IEnumerable<ICameraInfo> Enumerate(CameraType type)
+        public IEnumerable<ICameraInfo> Enumerate(CameraInterfaceType type)
         {
             var result = DeviceEnumerator.EnumDevices(ToLayerType(type), out var deviceInfos);
 
@@ -114,23 +114,23 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// <returns>
         /// 海康设备传输层类型
         /// </returns>
-        private static DeviceTLayerType ToLayerType(CameraType type)
+        private static DeviceTLayerType ToLayerType(CameraInterfaceType type)
         {
             return type switch
             {
-                CameraType.GigE => DeviceTLayerType.MvGigEDevice,
-                CameraType.Usb => DeviceTLayerType.MvUsbDevice,
-                CameraType.CameraLink => DeviceTLayerType.MvCameraLinkDevice,
+                CameraInterfaceType.GigE => DeviceTLayerType.MvGigEDevice,
+                CameraInterfaceType.Usb => DeviceTLayerType.MvUsbDevice,
+                CameraInterfaceType.CameraLink => DeviceTLayerType.MvCameraLinkDevice,
 
                 // 必须覆盖全部 GenTL 子类型，否则 Enumerate(GenTL) 的结果集合
                 // 与 HikCameraInfo.InterfaceType 判定为 GenTL 的设备集合不一致
-                CameraType.GenTL => DeviceTLayerType.MvGenTLGigEDevice
+                CameraInterfaceType.GenTL => DeviceTLayerType.MvGenTLGigEDevice
                                   | DeviceTLayerType.MvGenTLCameraLinkDevice
                                   | DeviceTLayerType.MvGenTLCXPDevice
                                   | DeviceTLayerType.MvGenTLXoFDevice,
 
                 // ALL 必须覆盖 SDK 支持的所有设备传输层。
-                CameraType.ALL => DeviceTLayerType.MvGigEDevice
+                CameraInterfaceType.All => DeviceTLayerType.MvGigEDevice
                                | DeviceTLayerType.MvUsbDevice
                                | DeviceTLayerType.MvCameraLinkDevice
                                | DeviceTLayerType.MvVirGigEDevice
@@ -141,7 +141,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
                                | DeviceTLayerType.MvGenTLXoFDevice,
 
                 // Unknown 代表调用方没有指定有效类型，不能扩大为 ALL。
-                CameraType.Unknown => (DeviceTLayerType)0,
+                CameraInterfaceType.Unknown => (DeviceTLayerType)0,
                 _ => (DeviceTLayerType)0,
             };
         }

@@ -15,14 +15,14 @@ namespace Junevy.EasyCamera.Common
     /// </summary>
     public class CameraStream : ICameraStream
     {
-        private readonly ConcurrentDictionary<string, CameraStreamSuber> subscribers = new();
-        private readonly string userDefinedName;
+        private readonly ConcurrentDictionary<string, CameraStreamSubscriber> subscribers = new();
+        private readonly string cameraKey;
         private readonly object operationLock = new();
         private int disposed;
 
-        public CameraStream(string userDefinedName)
+        public CameraStream(string cameraKey)
         {
-            this.userDefinedName = userDefinedName ?? throw new ArgumentNullException(nameof(userDefinedName));
+            this.cameraKey = cameraKey ?? throw new ArgumentNullException(nameof(cameraKey));
         }
 
         /// <summary>
@@ -38,13 +38,13 @@ namespace Junevy.EasyCamera.Common
         }
 
         public void Subscribe(
-            string subberKey,
+            string subscriberKey,
             int capacity,
             Func<string, IFrame, Task> handler,
             Action<Exception> whenException = null)
         {
-            if (string.IsNullOrEmpty(subberKey))
-                throw new ArgumentException("The subscriber key is null or empty.", nameof(subberKey));
+            if (string.IsNullOrEmpty(subscriberKey))
+                throw new ArgumentException("The subscriber key is null or empty.", nameof(subscriberKey));
 
             if (handler == null)
                 throw new ArgumentNullException(nameof(handler));
@@ -70,10 +70,10 @@ namespace Junevy.EasyCamera.Common
             var cts = new CancellationTokenSource();
 
             // 先构造订阅者并启动 worker（实例经参数传入，无闭包时序依赖），再进入注册竞争
-            var candidate = new CameraStreamSuber(subberKey, channel, cts);
-            candidate.StartWorker(self => this.ConsumeAsync(subberKey, self, channel, cts, handler, whenException));
+            var candidate = new CameraStreamSubscriber(subscriberKey, channel, cts);
+            candidate.StartWorker(self => this.ConsumeAsync(subscriberKey, self, channel, cts, handler, whenException));
 
-            CameraStreamSuber replaced = null;
+            CameraStreamSubscriber replaced = null;
             bool accepted;
             lock (this.operationLock)
             {
@@ -84,8 +84,8 @@ namespace Junevy.EasyCamera.Common
                 else
                 {
                     // 替换语义：同 Key 重新订阅时原子替换旧订阅者，旧订阅者在锁外清理
-                    this.subscribers.TryRemove(subberKey, out replaced);
-                    this.subscribers[subberKey] = candidate;
+                    this.subscribers.TryRemove(subscriberKey, out replaced);
+                    this.subscribers[subscriberKey] = candidate;
                     accepted = true;
                 }
             }
@@ -104,7 +104,7 @@ namespace Junevy.EasyCamera.Common
             if (frame == null)
                 return;
 
-            CameraStreamSuber[] snapshot;
+            CameraStreamSubscriber[] snapshot;
             lock (this.operationLock)
             {
                 if (this.disposed == 1 || this.subscribers.Count == 0)
@@ -141,15 +141,15 @@ namespace Junevy.EasyCamera.Common
             DisposeFrame(frame, null);
         }
 
-        public bool Unsubscribe(string subberKey)
+        public bool Unsubscribe(string subscriberKey)
         {
-            if (string.IsNullOrEmpty(subberKey))
+            if (string.IsNullOrEmpty(subscriberKey))
                 return false;
 
-            CameraStreamSuber subscriber;
+            CameraStreamSubscriber subscriber;
             lock (this.operationLock)
             {
-                if (!this.subscribers.TryRemove(subberKey, out subscriber))
+                if (!this.subscribers.TryRemove(subscriberKey, out subscriber))
                     return false;
             }
 
@@ -159,7 +159,7 @@ namespace Junevy.EasyCamera.Common
 
         public void Dispose()
         {
-            CameraStreamSuber[] snapshot;
+            CameraStreamSubscriber[] snapshot;
             lock (this.operationLock)
             {
                 if (Interlocked.Exchange(ref this.disposed, 1) == 1)
@@ -174,8 +174,8 @@ namespace Junevy.EasyCamera.Common
         }
 
         private async Task ConsumeAsync(
-            string subberKey,
-            CameraStreamSuber self,
+            string subscriberKey,
+            CameraStreamSubscriber self,
             Channel<IFrame> channel,
             CancellationTokenSource cts,
             Func<string, IFrame, Task> handler,
@@ -193,7 +193,7 @@ namespace Junevy.EasyCamera.Common
                     {
                         try
                         {
-                            await handler(this.userDefinedName, frame).ConfigureAwait(false);
+                            await handler(this.cameraKey, frame).ConfigureAwait(false);
                         }
                         catch (Exception ex)
                         {
@@ -225,7 +225,7 @@ namespace Junevy.EasyCamera.Common
                     DisposeFrame(leftover, whenException);
 
                 if (terminated)
-                    RemoveDeadSubscriber(subberKey, self);
+                    RemoveDeadSubscriber(subscriberKey, self);
             }
         }
 
@@ -233,7 +233,7 @@ namespace Junevy.EasyCamera.Common
         /// 订阅工作线程异常终止后移除该订阅者并释放其资源，
         /// 防止后续发布帧滞留在无人消费的通道中造成非托管内存泄漏。
         /// </summary>
-        private void RemoveDeadSubscriber(string subberKey, CameraStreamSuber self)
+        private void RemoveDeadSubscriber(string subscriberKey, CameraStreamSubscriber self)
         {
             lock (this.operationLock)
             {
@@ -242,10 +242,10 @@ namespace Junevy.EasyCamera.Common
                     return;
 
                 // 仅当字典中仍是该实例时才移除，避免误删同 Key 的重新订阅
-                if (this.subscribers.TryGetValue(subberKey, out var current)
+                if (this.subscribers.TryGetValue(subscriberKey, out var current)
                     && ReferenceEquals(current, self))
                 {
-                    this.subscribers.TryRemove(subberKey, out _);
+                    this.subscribers.TryRemove(subscriberKey, out _);
                 }
             }
 

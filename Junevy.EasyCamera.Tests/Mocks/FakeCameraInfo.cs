@@ -17,6 +17,6 @@ namespace Junevy.EasyCamera.Tests.Mocks
 
         public string CameraVersion { get; set; }
 
-        public CameraType InterfaceType { get; set; } = CameraType.GigE;
+        public CameraInterfaceType InterfaceType { get; set; } = CameraInterfaceType.GigE;
     }
 }

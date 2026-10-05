@@ -40,17 +40,17 @@ namespace Junevy.EasyCamera.Common
         /// <summary>
         /// 获取或创建指定的相机的图像数据流
         /// </summary>
-        /// <param name="userDefinedName">相机自定义名称</param>
+        /// <param name="cameraKey">相机自定义名称</param>
         /// <returns>
         /// 相机图像数据流
         /// </returns>
-        /// <exception cref="ArgumentNullException">userDefinedName 为空</exception>
-        public ICameraStream GetOrCreateStream(string userDefinedName)
+        /// <exception cref="ArgumentNullException">cameraKey 为空</exception>
+        public ICameraStream GetOrCreateStream(string cameraKey)
         {
-            if (string.IsNullOrEmpty(userDefinedName))
-                throw new ArgumentNullException(nameof(userDefinedName));
+            if (string.IsNullOrEmpty(cameraKey))
+                throw new ArgumentNullException(nameof(cameraKey));
 
-            var stream = streams.GetOrAdd(userDefinedName, _ => new CameraStream(userDefinedName));
+            var stream = streams.GetOrAdd(cameraKey, _ => new CameraStream(cameraKey));
 
             // 与 Dispose 竞态时，字典外的新建流必须就地释放，避免无人持有的流常驻
             if (Volatile.Read(ref this.disposed) == 1)
@@ -65,40 +65,40 @@ namespace Junevy.EasyCamera.Common
         /// <summary>
         /// 获取指定的相机的图像数据流
         /// </summary>
-        /// <param name="userDefinedName">相机自定义名称</param>
+        /// <param name="cameraKey">相机自定义名称</param>
         /// <param name="stream">相机图像数据流</param>
         /// <returns>
         /// 是否成功获取到图像数据流
         /// </returns>
-        public bool GetStream(string userDefinedName, out ICameraStream stream)
+        public bool GetStream(string cameraKey, out ICameraStream stream)
         {
             stream = null;
 
-            if (string.IsNullOrEmpty(userDefinedName))
+            if (string.IsNullOrEmpty(cameraKey))
                 return false;
 
             if (Volatile.Read(ref this.disposed) == 1)
                 return false;
 
-            return streams.TryGetValue(userDefinedName, out stream);
+            return streams.TryGetValue(cameraKey, out stream);
         }
 
         /// <summary>
         /// 移除并释放指定相机的图像数据流
         /// </summary>
-        /// <param name="userDefinedName">相机自定义名称</param>
+        /// <param name="cameraKey">相机自定义名称</param>
         /// <returns>
         /// 是否成功移除图像数据流
         /// </returns>
-        public bool RemoveStream(string userDefinedName)
+        public bool RemoveStream(string cameraKey)
         {
-            if (string.IsNullOrEmpty(userDefinedName))
+            if (string.IsNullOrEmpty(cameraKey))
                 return false;
 
             if (Volatile.Read(ref this.disposed) == 1)
                 return false;
 
-            if (streams.TryRemove(userDefinedName, out var stream))
+            if (streams.TryRemove(cameraKey, out var stream))
             {
                 try
                 {

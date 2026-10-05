@@ -41,7 +41,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// <value>
         /// 相机接口类型
         /// </value>
-        public CameraType InterfaceType => this.GetCameraInterface();
+        public CameraInterfaceType InterfaceType => this.GetCameraInterface();
 
         /// <summary>
         /// Irayple原生设备信息，仅供程序集内部创建相机实例使用
@@ -101,15 +101,15 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// <returns>
         /// 相机接口类型
         /// </returns>
-        private CameraType GetCameraInterface()
+        private CameraInterfaceType GetCameraInterface()
         {
             return this.Native.nInterfaceType switch
             {
-                IMV_EInterfaceType.interfaceTypeGige => CameraType.GigE,
-                IMV_EInterfaceType.interfaceTypeUsb3 => CameraType.Usb,
-                IMV_EInterfaceType.interfaceTypeCL => CameraType.CameraLink,
-                IMV_EInterfaceType.interfaceTypePCIe => CameraType.GenTL,
-                _ => CameraType.Unknown,
+                IMV_EInterfaceType.interfaceTypeGige => CameraInterfaceType.GigE,
+                IMV_EInterfaceType.interfaceTypeUsb3 => CameraInterfaceType.Usb,
+                IMV_EInterfaceType.interfaceTypeCL => CameraInterfaceType.CameraLink,
+                IMV_EInterfaceType.interfaceTypePCIe => CameraInterfaceType.GenTL,
+                _ => CameraInterfaceType.Unknown,
             };
         }
     }

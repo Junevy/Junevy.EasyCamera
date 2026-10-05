@@ -15,6 +15,7 @@
 - **HikCameraProvider**：设备枚举失败时输出 `Trace` 警告（含错误码），不再静默返回空集合。
 - **接口契约文档**：`ICameraStream.Publish` 注释修正为与实现一致的所有权转移语义；`ICameraManager.TryRegister` 注明 false=Key 已注册；`CameraResult.Code` 增加取值约定；`SetDefinedName` 注明仅更新本地副本不下发设备；修正 OpenCamera 错误消息与包描述拼写。
 - **新增 TryGetParam 扩展**：`ICamera`/`ICameraService` 增加 `TryGetParam<T>`/`TryGetEnumParam`，可区分"参数值恰为 default"与"获取失败"；原 `GetParam`/`GetEnumParam` 保留并改为薄封装，逻辑去重。
+- **公共 API 命名修正（破坏性，v1.0.0 未对外发布）**：`CameraStreamSuber`→`CameraStreamSubscriber`（参数 `subberKey`→`subscriberKey`，属性 `Suber`→`Worker`）；`CameraType`→`CameraInterfaceType`（枚举成员 `ALL`→`All`，该枚举表达物理接口类型而非品牌）；`GetOnlineCameraSerialNumber`→`GetSerialNumber`（返回已注册相机序列号，与"在线"无关）；`SetTrigger(triggerWay, isAcquisition)`→`SetTrigger(triggerSource, enableTrigger)`；帧流键统一命名 `cameraKey`（原 `userDefinedName`）；`CameraManager.operateLock`→`operationLock`、`HikCamera.locker`→`stateLock`；Core 命名空间注册类更名 `CoreServiceCollectionExtensions`（扩展方法调用点不受影响）。
 
 ## 2026-09-15（稳定性全链路审查与修复）
 

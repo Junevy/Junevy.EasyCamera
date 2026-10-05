@@ -11,30 +11,30 @@ namespace Junevy.EasyCamera.Core.Common
         /// <summary>
         /// 获取或创建指定的相机的图像数据流
         /// </summary>
-        /// <param name="userDefinedName">相机自定义名称</param>
+        /// <param name="cameraKey">相机Key</param>
         /// <returns>
         /// 相机图像数据流
         /// </returns>
-        /// <exception cref="ArgumentNullException">userDefinedName 为空</exception>
-        ICameraStream GetOrCreateStream(string userDefinedName);
+        /// <exception cref="ArgumentNullException">cameraKey 为空</exception>
+        ICameraStream GetOrCreateStream(string cameraKey);
 
         /// <summary>
         /// 获取指定的相机的图像数据流
         /// </summary>
-        /// <param name="userDefinedName">相机自定义名称</param>
+        /// <param name="cameraKey">相机Key</param>
         /// <param name="stream">相机图像数据流</param>
         /// <returns>
         /// 是否成功获取到图像数据流
         /// </returns>
-        bool GetStream(string userDefinedName, out ICameraStream stream);
+        bool GetStream(string cameraKey, out ICameraStream stream);
 
         /// <summary>
         /// 移除并释放指定相机的图像数据流
         /// </summary>
-        /// <param name="userDefinedName">相机自定义名称</param>
+        /// <param name="cameraKey">相机Key</param>
         /// <returns>
         /// 是否成功移除图像数据流
         /// </returns>
-        bool RemoveStream(string userDefinedName);
+        bool RemoveStream(string cameraKey);
     }
 }

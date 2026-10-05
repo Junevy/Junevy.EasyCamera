@@ -17,7 +17,7 @@ namespace Junevy.EasyCamera.Core.Common
         /// <returns>
         /// 相机信息列表
         /// </returns>
-        IEnumerable<ICameraInfo> EnumerateCameras(CameraType type = CameraType.ALL);
+        IEnumerable<ICameraInfo> EnumerateCameras(CameraInterfaceType type = CameraInterfaceType.All);
 
         /// <summary>
         /// 打开相机。
@@ -89,7 +89,7 @@ namespace Junevy.EasyCamera.Core.Common
         /// <returns>
         /// 相机序列号，未找到时返回空字符串
         /// </returns>
-        string GetOnlineCameraSerialNumber(string cameraKey);
+        string GetSerialNumber(string cameraKey);
 
         /// <summary>
         /// 设置相机的指定参数
@@ -161,12 +161,12 @@ namespace Junevy.EasyCamera.Core.Common
         /// 注意：设置前会停止取流，设置完成后需重新调用 <see cref="StartGrab(string)" />
         /// </summary>
         /// <param name="cameraKey">相机Key</param>
-        /// <param name="triggerWay">触发方式</param>
-        /// <param name="isAcquisition">是否打开触发</param>
+        /// <param name="triggerSource">触发源（TriggerSource 枚举符号名，如 Line1/Software）</param>
+        /// <param name="enableTrigger">是否打开触发（TriggerMode On/Off）</param>
         /// <returns>
         /// 相机操作结果
         /// </returns>
-        CameraResult SetTrigger(string cameraKey, string triggerWay, bool isAcquisition);
+        CameraResult SetTrigger(string cameraKey, string triggerSource, bool enableTrigger);
 
         /// <summary>
         /// 获取相机的指定参数

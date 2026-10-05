@@ -178,10 +178,10 @@ namespace Junevy.EasyCamera.Tests.Common
             {
             }
 
-            public void Subscribe(string subberKey, int capacity, Func<string, IFrame, Task> handler, Action<Exception> whenException = null)
+            public void Subscribe(string subscriberKey, int capacity, Func<string, IFrame, Task> handler, Action<Exception> whenException = null)
                 => throw new ObjectDisposedException(nameof(CameraStream));
 
-            public bool Unsubscribe(string subberKey) => false;
+            public bool Unsubscribe(string subscriberKey) => false;
         }
 
         [TestMethod]
@@ -291,7 +291,7 @@ namespace Junevy.EasyCamera.Tests.Common
 
             public IEnumerable<ICameraInfo> Enumerate() => Array.Empty<ICameraInfo>();
 
-            public IEnumerable<ICameraInfo> Enumerate(CameraType type) => Array.Empty<ICameraInfo>();
+            public IEnumerable<ICameraInfo> Enumerate(CameraInterfaceType type) => Array.Empty<ICameraInfo>();
         }
 
         private sealed class TrackingCamera : ICamera

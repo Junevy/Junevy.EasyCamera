@@ -11,13 +11,13 @@ namespace Junevy.EasyCamera.Common
     /// 工作线程由 <see cref="StartWorker" /> 在构造后立即启动，
     /// 实例引用以参数形式传入工厂，消除"闭包读取尚未赋值的局部变量"的时序依赖。
     /// </summary>
-    public sealed class CameraStreamSuber
+    public sealed class CameraStreamSubscriber
     {
         private int disposed;
         private int ctsDisposed;
         private Task worker;
 
-        public CameraStreamSuber(string key, Channel<IFrame> channel, CancellationTokenSource cts)
+        public CameraStreamSubscriber(string key, Channel<IFrame> channel, CancellationTokenSource cts)
         {
             this.Key = key ?? throw new ArgumentNullException(nameof(key));
             this.Channel = channel ?? throw new ArgumentNullException(nameof(channel));
@@ -42,7 +42,7 @@ namespace Junevy.EasyCamera.Common
         /// 启动消费工作线程。须在构造后立即调用恰好一次；
         /// 工厂以参数接收本实例，杜绝闭包时序依赖。
         /// </summary>
-        public void StartWorker(Func<CameraStreamSuber, Task> workerFactory)
+        public void StartWorker(Func<CameraStreamSubscriber, Task> workerFactory)
         {
             if (workerFactory == null)
                 throw new ArgumentNullException(nameof(workerFactory));

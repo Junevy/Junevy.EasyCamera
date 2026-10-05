@@ -37,6 +37,6 @@ namespace Junevy.EasyCamera.Tests.Mocks
 
         public IEnumerable<ICameraInfo> Enumerate() => this.cameraInfos;
 
-        public IEnumerable<ICameraInfo> Enumerate(CameraType type) => this.cameraInfos;
+        public IEnumerable<ICameraInfo> Enumerate(CameraInterfaceType type) => this.cameraInfos;
     }
 }

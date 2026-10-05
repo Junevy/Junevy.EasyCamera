@@ -24,7 +24,7 @@ namespace Junevy.EasyCamera.Tests.Common
 
             Assert.AreEqual(2, provider.Vendors.Count);
             Assert.AreEqual(3, provider.Enumerate().Count());
-            Assert.AreEqual(3, provider.Enumerate(CameraType.GigE).Count());
+            Assert.AreEqual(3, provider.Enumerate(CameraInterfaceType.GigE).Count());
         }
 
         [TestMethod]

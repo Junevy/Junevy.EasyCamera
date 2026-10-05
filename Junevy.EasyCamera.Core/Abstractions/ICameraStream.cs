@@ -25,21 +25,21 @@ namespace Junevy.EasyCamera.Core.Abstractions
         void Publish(IFrame frame);
 
         /// <summary>
-        /// 订阅指定相机的帧图像数据
+        /// 订阅指定相机的帧图像数据。同 Key 重复订阅时原子替换旧订阅者。
         /// </summary>
-        /// <param name="subberKey">订阅自定义名称</param>
+        /// <param name="subscriberKey">订阅者标识，流内唯一</param>
         /// <param name="capacity">图像缓存容量，小于1时按1处理</param>
-        /// <param name="handler">帧处理回调处理方法，参数1：发布帧数据的相机自定义名称；参数2：帧数据；参数3：异步Task</param>
+        /// <param name="handler">帧处理回调处理方法，参数1：发布帧数据的相机Key；参数2：帧数据；参数3：异步Task</param>
         /// <param name="whenException">异常发生处理回调方法，当不提供异常处理回调时，订阅工作线程将终止</param>
-        void Subscribe(string subberKey, int capacity, Func<string, IFrame, Task> handler, Action<Exception> whenException = null);
+        void Subscribe(string subscriberKey, int capacity, Func<string, IFrame, Task> handler, Action<Exception> whenException = null);
 
         /// <summary>
         /// 取消订阅指定相机的帧的处理数据
         /// </summary>
-        /// <param name="subberKey">订阅自定义名称</param>
+        /// <param name="subscriberKey">订阅者标识</param>
         /// <returns>
         /// 是否成功取消订阅
         /// </returns>
-        bool Unsubscribe(string subberKey);
+        bool Unsubscribe(string subscriberKey);
     }
 }

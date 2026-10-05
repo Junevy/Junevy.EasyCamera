@@ -143,10 +143,11 @@ namespace Junevy.EasyCamera.Core.Extensions
 {
     /// <summary>
     /// 核心服务注册扩展，注册与具体厂商SDK无关的相机基础设施。
-    /// 原位于 Junevy.EasyCamera.Core 程序集，随实现类迁移至本程序集，
-    /// 保留原命名空间与类型名以维持对外契约
+    /// 原位于 Junevy.EasyCamera.Core 程序集，随实现类迁移至本程序集；
+    /// 保留原命名空间以维持对外契约，类名区分于厂商注册扩展避免同名混淆。
+    /// 扩展方法调用点（services.AddEasyCameraCore()）不受类名影响。
     /// </summary>
-    public static class ServiceCollectionExtensions
+    public static class CoreServiceCollectionExtensions
     {
         /// <summary>
         /// 注册相机核心服务（流管理、相机缓存、聚合提供器、相机服务）

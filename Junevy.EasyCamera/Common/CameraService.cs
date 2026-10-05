@@ -34,7 +34,7 @@ namespace Junevy.EasyCamera.Common
         /// <returns>
         /// 相机信息列表
         /// </returns>
-        public IEnumerable<ICameraInfo> EnumerateCameras(CameraType type = CameraType.ALL) => provider.Enumerate(type);
+        public IEnumerable<ICameraInfo> EnumerateCameras(CameraInterfaceType type = CameraInterfaceType.All) => provider.Enumerate(type);
 
         /// <summary>
         /// 打开相机。
@@ -263,7 +263,7 @@ namespace Junevy.EasyCamera.Common
         /// <returns>
         /// 相机序列号，未找到时返回空字符串
         /// </returns>
-        public string GetOnlineCameraSerialNumber(string cameraKey)
+        public string GetSerialNumber(string cameraKey)
         {
             if (cameraManager.TryGet(cameraKey, out var camera))
                 return camera.GetSerialNumber();
@@ -340,12 +340,12 @@ namespace Junevy.EasyCamera.Common
         /// 注意：设置前会停止取流，设置完成后需重新调用 <see cref="StartGrab(string)" />
         /// </summary>
         /// <param name="cameraKey">相机Key</param>
-        /// <param name="triggerWay">触发方式</param>
-        /// <param name="isAcquisition">是否打开触发</param>
+        /// <param name="triggerSource">触发源（TriggerSource 枚举符号名，如 Line1/Software）</param>
+        /// <param name="enableTrigger">是否打开触发（TriggerMode On/Off）</param>
         /// <returns>
         /// 相机操作结果
         /// </returns>
-        public CameraResult SetTrigger(string cameraKey, string triggerWay, bool isAcquisition)
+        public CameraResult SetTrigger(string cameraKey, string triggerSource, bool enableTrigger)
         {
             if (string.IsNullOrEmpty(cameraKey))
                 return CameraResult.Fail(-1, ErrorMsg);
@@ -355,18 +355,18 @@ namespace Junevy.EasyCamera.Common
                 if (!cameraManager.TryGet(cameraKey, out var camera) || !camera.IsConnected)
                     return CameraResult.Fail(-1, ErrorMsg);
 
-                if (string.IsNullOrEmpty(triggerWay))
+                if (string.IsNullOrEmpty(triggerSource))
                     return CameraResult.Fail(-1, "Check the trigger source or trigger way");
 
                 camera.StopGrab();
                 if (camera.IsGrabbing)
                     return CameraResult.Fail(-1, "Camera stop grabbing failed");
 
-                string acq = isAcquisition ? "On" : "Off";
+                string acq = enableTrigger ? "On" : "Off";
                 var acqResult = camera.SetEnumParam("TriggerMode", acq);
                 if (!acqResult.IsSuccess) return acqResult;
 
-                return camera.SetEnumParam("TriggerSource", triggerWay);
+                return camera.SetEnumParam("TriggerSource", triggerSource);
             }
         }
 

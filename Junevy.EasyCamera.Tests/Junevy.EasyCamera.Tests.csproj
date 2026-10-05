@@ -63,6 +63,7 @@
     <Compile Include="Mocks\MockCameraProvider.cs" />
     <Compile Include="Mocks\MockFrame.cs" />
     <Compile Include="Vendors\HikVisionRegressionTests.cs" />
+    <Compile Include="Vendors\HikCameraSdkSystemTests.cs" />
   </ItemGroup>
 
   <ItemGroup>

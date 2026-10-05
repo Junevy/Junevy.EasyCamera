@@ -1,52 +1,70 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <!-- 双目标：net48 兼容存量 .NET Framework 宿主，net8.0 面向新项目 -->
-    <TargetFrameworks>net48;net8.0</TargetFrameworks>
-    <RootNamespace>Junevy.EasyCamera</RootNamespace>
-    <AssemblyName>Junevy.EasyCamera</AssemblyName>
-    <LangVersion>13</LangVersion>
-    <!-- 保留 Properties\AssemblyInfo.cs，避免与 SDK 自动生成的程序集特性冲突 -->
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <Deterministic>true</Deterministic>
-    <!-- 海康与Irayple的SDK程序集均为AMD64专用，必须显式指定x64，否则运行时将出现 BadImageFormatException -->
-    <PlatformTarget>x64</PlatformTarget>
-  </PropertyGroup>
+	<PropertyGroup>
+		<!-- 双目标：net48 兼容存量 .NET Framework 宿主，net8.0 面向新项目 -->
+		<TargetFrameworks>net48;net8.0</TargetFrameworks>
+		<RootNamespace>Junevy.EasyCamera</RootNamespace>
+		<AssemblyName>Junevy.EasyCamera</AssemblyName>
+		<LangVersion>13</LangVersion>
+		<!-- 保留 Properties\AssemblyInfo.cs，避免与 SDK 自动生成的程序集特性冲突 -->
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+		<Deterministic>true</Deterministic>
+		<!-- 海康与Irayple的SDK程序集均为AMD64专用，必须显式指定x64，否则运行时将出现 BadImageFormatException -->
+		<PlatformTarget>x64</PlatformTarget>
 
-  <ItemGroup>
-    <!-- 厂商 SDK（均位于仓库 Libs 目录，构建自包含） -->
-    <Reference Include="MvCameraControl.Net">
-      <HintPath>..\Libs\MvCameraControl.Net.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
-    <Reference Include="MVSDK_Net">
-      <HintPath>..\Libs\MVSDK_Net.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
-  </ItemGroup>
+		<!-- 开启生成时自动打包 -->
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<PackageId>Junevy.EasyCamera</PackageId>
+		<Version>1.0.0</Version>
+		<Authors>Junevy</Authors>
+		<Company>Junevy</Company>
+		<Description>
+			A easy-to-use camera library, such as Hik camera.
+			The library adopted a modern design:
+			1) Based on the factory pattern and dependency injection.
+			2) Asynchronous programming.
+			3) Back pressure:
+			a) The library provides a back pressure mechanism to prevent the camera from being overwhelmed by too many requests.
+			b) The library provides a back pressure mechanism to prevent the application from being overwhelmed by too many images.
+			c) Async streaming and the async callback of frame data.
+			d) Reference counting of frame data and auto dispose when the count is zero: The feature indicates that you couldn't process any frame data after the callback returns.
+		</Description>
+	</PropertyGroup>
 
-  <!-- net48 需要的 BCL 兼容包；net8.0 已内置于共享框架，无需引用 -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
-    <PackageReference Include="System.Threading.Channels" />
-    <PackageReference Include="System.Threading.Tasks.Extensions" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" />
-  </ItemGroup>
+	<ItemGroup>
+		<!-- 厂商 SDK（均位于仓库 Libs 目录，构建自包含） -->
+		<Reference Include="MvCameraControl.Net">
+			<HintPath>..\Libs\MvCameraControl.Net.dll</HintPath>
+			<Private>true</Private>
+		</Reference>
+		<Reference Include="MVSDK_Net">
+			<HintPath>..\Libs\MVSDK_Net.dll</HintPath>
+			<Private>true</Private>
+		</Reference>
+	</ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
-    <PackageReference Include="System.Drawing.Common" />
-    <!-- System.Drawing 与厂商 SDK 均仅支持 Windows（工业相机场景），声明平台以消除 CA1416 -->
-    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatform">
-      <_Parameter1>windows</_Parameter1>
-    </AssemblyAttribute>
-  </ItemGroup>
+	<!-- net48 需要的 BCL 兼容包；net8.0 已内置于共享框架，无需引用 -->
+	<ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+		<PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
+		<PackageReference Include="System.Threading.Channels" />
+		<PackageReference Include="System.Threading.Tasks.Extensions" />
+		<PackageReference Include="System.Runtime.CompilerServices.Unsafe" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-  </ItemGroup>
+	<ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+		<PackageReference Include="System.Drawing.Common" />
+		<!-- System.Drawing 与厂商 SDK 均仅支持 Windows（工业相机场景），声明平台以消除 CA1416 -->
+		<AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatform">
+			<_Parameter1>windows</_Parameter1>
+		</AssemblyAttribute>
+	</ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Junevy.EasyCamera.Core\Junevy.EasyCamera.Core.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Junevy.EasyCamera.Core\Junevy.EasyCamera.Core.csproj" />
+	</ItemGroup>
 
 </Project>

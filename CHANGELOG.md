@@ -5,6 +5,7 @@
 审查报告见 `docs/代码审查报告-2026-10-05.md`，实施计划见 `docs/superpowers/plans/2026-10-05-review-findings-fix.md`。
 
 - **StreamManager**：补齐声明过但缺失的 disposed 防护——释放后 `GetOrCreateStream` 抛 `ObjectDisposedException`（与 Dispose 竞态时就地释放新建流，杜绝无人持有的流常驻）、`RemoveStream` 返回 false；新增回归测试。
+- **HikCameraSdkSystem**：Initialize 改为真按实例幂等（重复调用只持一个全局引用，此前每次调用都递增计数导致 SDK 永不 Finalize）；未 Initialize 的实例 `Release` 不再削减他人引用；全部引用计数转移在全局锁内完成，封死"并发 Initialize 与 Finalize 交叉"窗口；新增测试 seam（`Func<int>`）与 4 个回归测试。
 
 ## 2026-09-15（稳定性全链路审查与修复）
 

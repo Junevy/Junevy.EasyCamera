@@ -31,3 +31,6 @@ using System.Runtime.InteropServices;
 //
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyFileVersion("1.0.0.0")]
+
+// 测试工程可见 internals：用于 HikCameraSdkSystem 测试 seam 与 HikCamera 数值转换器等无硬件单测
+[assembly: InternalsVisibleTo("Junevy.EasyCamera.Tests")]

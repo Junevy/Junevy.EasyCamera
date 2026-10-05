@@ -1,27 +1,45 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <!-- 双目标：net48 兼容存量 .NET Framework 宿主，net8.0 面向新项目 -->
-    <TargetFrameworks>net48;net8.0</TargetFrameworks>
-    <RootNamespace>Junevy.EasyCamera.Core</RootNamespace>
-    <AssemblyName>Junevy.EasyCamera.Core</AssemblyName>
-    <LangVersion>13</LangVersion>
-    <!-- 保留 Properties\AssemblyInfo.cs，避免与 SDK 自动生成的程序集特性冲突 -->
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <Deterministic>true</Deterministic>
-  </PropertyGroup>
+	<PropertyGroup>
+		<!-- 双目标：net48 兼容存量 .NET Framework 宿主，net8.0 面向新项目 -->
+		<TargetFrameworks>net48;net8.0</TargetFrameworks>
+		<RootNamespace>Junevy.EasyCamera.Core</RootNamespace>
+		<AssemblyName>Junevy.EasyCamera.Core</AssemblyName>
+		<LangVersion>13</LangVersion>
+		<!-- 保留 Properties\AssemblyInfo.cs，避免与 SDK 自动生成的程序集特性冲突 -->
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+		<Deterministic>true</Deterministic>
 
-  <!-- System.Drawing：net48 使用框架程序集，net8.0 使用 System.Drawing.Common 包（仅 Windows 运行时支持，工业相机场景为 Windows/x64） -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
-    <Reference Include="System.Drawing" />
-  </ItemGroup>
+		<!-- 开启生成时自动打包 -->
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<PackageId>Junevy.EasyCamera.Core</PackageId>
+		<Version>1.0.0</Version>
+		<Authors>Junevy</Authors>
+		<Company>Junevy</Company>
+		<Description>
+			A easy-to-use camera library, such as Hik camera.
+			The library adopted a modern design:
+			1) Based on the factory pattern and dependency injection.
+			2) Asynchronous programming.
+			3) Back pressure:
+			a) The library provides a back pressure mechanism to prevent the camera from being overwhelmed by too many requests.
+			b) The library provides a back pressure mechanism to prevent the application from being overwhelmed by too many images.
+			c) Async streaming and the async callback of frame data.
+			d) Reference counting of frame data and auto dispose when the count is zero: The feature indicates that you couldn't process any frame data after the callback returns.
+		</Description>
+	</PropertyGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
-    <PackageReference Include="System.Drawing.Common" />
-    <!-- System.Drawing/Common 依赖均仅支持 Windows（工业相机 SDK 场景），声明平台以消除 CA1416 -->
-    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatform">
-      <_Parameter1>windows</_Parameter1>
-    </AssemblyAttribute>
-  </ItemGroup>
+	<!-- System.Drawing：net48 使用框架程序集，net8.0 使用 System.Drawing.Common 包（仅 Windows 运行时支持，工业相机场景为 Windows/x64） -->
+	<ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+		<Reference Include="System.Drawing" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+		<PackageReference Include="System.Drawing.Common" />
+		<!-- System.Drawing/Common 依赖均仅支持 Windows（工业相机 SDK 场景），声明平台以消除 CA1416 -->
+		<AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatform">
+			<_Parameter1>windows</_Parameter1>
+		</AssemblyAttribute>
+	</ItemGroup>
 
 </Project>

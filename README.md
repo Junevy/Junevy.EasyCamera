@@ -11,11 +11,26 @@
 | Basler | 📋 预留 | DI 启用即抛 `NotImplementedException`，待接入 |
 | Cognex | 📋 规划中 | 预留扩展点 |
 
-- 双目标框架：`net48` + `net8.0`（net8.0 下声明 Windows 平台）；运行时须 **x64**（厂商 SDK 为 AMD64 专用）。
+- 双目标框架：`net48` + `net8.0`（net8.0 下声明 Windows 平台）；运行时须 **x64**（厂商 SDK 为 AMD64 专用）。消费方需安装厂商运行时，详见「运行与安装前置条件」。
 - 解决方案结构：`Junevy.EasyCamera.Core`（抽象与契约）/ `Junevy.EasyCamera`（DI 与厂商适配）/ `Junevy.EasyCamera.Tests`（x64 测试宿主）。
-- 厂商 SDK DLL 位于仓库 `Libs/`，构建自包含；.NET SDK 版本由 `global.json`（9.0.316）固定，包版本由 `Directory.Packages.props` 中央管理。
+- 厂商 SDK DLL 位于仓库 `Libs/`，构建自包含，并随 NuGet 包分发给消费方（见 1.1.1 变更）；.NET SDK 版本由 `global.json`（9.0.316）固定，包版本由 `Directory.Packages.props` 中央管理。
 - 版本 1.1.0 起：厂商独有能力（可达性探测 / 采集缓冲配置 / 设备改名）以**能力接口**表达（`ILinkStatusProbeProvider`、`IBufferConfigurable`、`INamedCameraInfo`），新增能力不再破坏既有实现者。
 - 详见 [AGENTS.md](AGENTS.md)（项目开发约定）与 [docs/](docs/)（审查/计划文档）。
+
+## 运行与安装前置条件
+
+1. **运行时 x64**：`net48` 与 `net8.0` 均已固定 `PlatformTarget=x64`（海康/华睿 SDK 为 AMD64 专用）。宿主若按 AnyCPU/x86 发布，会抛 `BadImageFormatException`。
+2. **必须安装厂商相机运行时（MVS 等）**：厂商的**原生**驱动 DLL（如 `MvCameraControl.dll`）不在 NuGet 包内，由厂商安装程序部署，并需其 `Runtime\Win64_x64` 在 PATH（安装程序通常自动配置）。缺它时报错与"托管封装缺失"相似但成因不同，见下方排错。
+3. **厂商托管封装随包分发（1.1.1 起）**：`MvCameraControl.Net.dll`、`MVSDK_Net.dll` 已打进 `lib/net48` 与 `lib/net8.0`，消费方只需正常 `Install-Package`/`PackageReference`，**不需要**手工拷贝 DLL。
+   - ⚠️ 不要手工把 DLL 拷到 exe 旁边：对 .NET Core **无效**（程序集解析走 `deps.json` 的 TPA 列表，默认加载器不探测 exe 目录）。这曾导致"拷了还是崩"的误判。
+
+**排错对照表**
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| `FileNotFoundException: Could not load file or assembly 'MvCameraControl.Net'` | 包内缺厂商托管封装（≤1.1.0 的已知缺陷） | 升级到 1.1.1，并清理旧版本 NuGet 缓存（NuGet 按 id+version 缓存，同版本重发不生效） |
+| `BadImageFormatException` | 宿主非 x64 | 改 `PlatformTarget=x64` |
+| `Initialize` 抛 `DllNotFoundException` / 枚举不到设备，但托管封装已在 | 厂商原生运行时未安装或不在 PATH | 安装 MVS 运行时，确认 `...\Common Files\MVS\Runtime\Win64_x64` 在 PATH |
 
 ## 构建
 

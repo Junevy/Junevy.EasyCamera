@@ -27,10 +27,14 @@
 构建与环境约定：
 
 - 厂商 SDK DLL 位于仓库根目录 `Libs/`（`MvCameraControl.Net.dll`、`MVSDK_Net.dll`），所有工程统一从该目录引用，构建自包含。
+- **厂商托管封装必须随 NuGet 包分发**（2026-10-06 消费方崩溃后确立）：`<Reference HintPath>` 只影响本仓库输出目录，`dotnet pack` 既不打包文件引用也不产生依赖声明，消费方必然 `FileNotFoundException`。修法是 `Junevy.EasyCamera.csproj` 中无条件 `Pack` 项 + `PackagePath="lib/net48;lib/net8.0"`，**禁止**写成 `"lib/"`（会被 NuGet 忽略），**禁止**按 `$(TargetFramework)` 分条件（外层构建时该变量为空）。新增品牌照此追加。
+- **包版本必须递增**：NuGet 按 `id + version` 缓存，同版本重发不会被消费方采用。修复打包类问题务必升版本并在升级说明里写明"清理缓存"。
+- `Tests/Packaging/PackageContentTests.cs` 是打包内容的回归守卫：改动打包规则后必须确认它仍然通过（移除规则时它必须失败）。
 - 包版本由根目录 `Directory.Packages.props`（中央包管理）统一维护；net48 通过条件引用补充 BCL 兼容包，net8.0 使用 `System.Drawing.Common`。
-- 两个类库在 net8.0 下声明程序集级 `SupportedOSPlatform("windows")`（工业相机 SDK 场景仅 Windows/x64），声明位置见上方并发纪律最后一条。
+- 两个类库在 net8.0 下声明程序集级 `SupportedOSPlatform("windows")`（工业相机 SDK 场景仅 Windows/x64），声明位置见下方并发纪律最后一条。
 - 根目录 `global.json` 固定 SDK 9.0.316，保证构建/测试可复现。
 - IRayple 厂商标记为 `[Obsolete("未开发完毕", true)]`：`ServiceCollectionExtensions` 不注册其服务，启用 `EnableIRayple` 时与 Basler 一致抛出 `NotImplementedException`。
+- **厂商原生驱动（如 `MvCameraControl.dll`）不在包内**，属消费方环境前置条件（安装厂商运行时并确保 PATH 含其 `Runtime\Win64_x64`）；文档须与"托管封装随包分发"这两件事分开表述。
 
 HikVision 与公共层的资源所有权约束：SDK 回调帧必须在回调内归还；发布给订阅者的帧必须是对 SDK 缓冲的**独立克隆——每帧仅在相机回调中克隆一次**，多订阅者通过引用计数**浅共享**同一克隆（不逐订阅者深拷贝，订阅者为只读消费者）；克隆缓冲由**最后一个归零的引用持有者**物理释放（不得固定为发布者，否则其余浅引用悬空）。相机关闭/销毁前会停止取流、解绑回调并等待在途回调结束（5s 上限）。`CameraStream` 使用非阻塞有界队列，队列淘汰的帧必须释放。
 
@@ -59,7 +63,7 @@ HikVision 与公共层的资源所有权约束：SDK 回调帧必须在回调内
 - 面向消费方 Agent 的包使用说明书位于 `skills/using-junevy-easycamera/SKILL.md`（可复制到任意 Agent 运行时的技能目录使用）；修改公共 API 后必须同步更新该文件。
 - **IRayple 按"继续保留"处理**：类型仍标记 `[Obsolete("未开发完毕", true)]`、`EnableIRayple` 仍抛 `NotImplementedException`，代码保留但必须与海康遵守同一套并发纪律（已补齐 `operationGate`、回调排空、attach 幂等、`LastError`）。
 
-测试工程约定：测试项目 `EnableDefaultCompileItems=false` + 显式 `Compile` 清单——**新增测试文件必须手工加入 csproj，否则不会被编译、更不会执行**（2026-10-06 曾因此让 6 个测试"绿色地缺席"）。验收时应核对"仓库内 `[TestMethod]` 总数 == 执行数"。
+测试工程约定：测试项目 `EnableDefaultCompileItems=false` + 显式 `Compile` 清单——**新增测试文件必须手工加入 csproj，否则不会被编译、更不会执行**（2026-10-06 曾因此让 6 个测试"绿色地缺席"）。验收时应核对"仓库内 `[TestMethod]` 总数 == 执行数"。包内容守卫（`PackageContentTests`）在找不到 nupkg 时断言为 Inconclusive，不产生假失败。
 
 验收命令：
 
@@ -68,4 +72,4 @@ dotnet build .\Junevy.EasyCamera.sln -c Release -v:minimal --no-incremental
 dotnet test .\Junevy.EasyCamera.Tests\Junevy.EasyCamera.Tests.csproj -c Release --logger "console;verbosity=minimal"
 ```
 
-验收基线（2026-10-06）：全量重建 0 错误 0 警告；net48 与 net8.0 各 122/122 通过。
+验收基线（2026-10-06）：全量重建 0 错误 0 警告；net48 与 net8.0 各 124/124 通过。

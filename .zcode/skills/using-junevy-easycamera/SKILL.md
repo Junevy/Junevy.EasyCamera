@@ -9,7 +9,7 @@ description: Use when a .NET project integrates the Junevy.EasyCamera NuGet pack
 
 Junevy.EasyCamera 是工业相机统一操作类库：一套抽象封装多品牌 SDK（当前海康可用；IRayple/Basler 预留，启用即抛 `NotImplementedException`），通过 `ICameraService` 门面完成枚举、开关、帧流订阅与参数访问。
 
-**硬性环境**：net48 或 net8.0；仅 Windows；运行时必须 **x64**（厂商 SDK 为 AMD64 专用，AnyCPU/x86 会抛 `BadImageFormatException`）；需安装厂商相机运行时。安装：nuget.org 的 `Junevy.EasyCamera`（如未发布则用仓库构建产出的本地 .nupkg），Core 契约包为 `Junevy.EasyCamera.Core`。
+**硬性环境**：net48 或 net8.0；仅 Windows；运行时必须 **x64**（厂商 SDK 为 AMD64 专用，AnyCPU/x86 会抛 `BadImageFormatException`）；需安装厂商相机运行时（MVS 等，其原生 `MvCameraControl.dll` 不在包内，需在 PATH）。厂商**托管**封装（`MvCameraControl.Net.dll`、`MVSDK_Net.dll`）自 **v1.1.1** 起随 NuGet 包分发，**不要手工把 DLL 拷到 exe 旁边**——对 .NET Core 无效（程序集解析走 deps.json 的 TPA 列表，默认加载器不探测 exe 目录）。安装：nuget.org 的 `Junevy.EasyCamera`（如未发布则用仓库构建产出的本地 .nupkg），Core 契约包为 `Junevy.EasyCamera.Core`。
 
 **命名空间与关键类型**：扩展注册在 `Junevy.EasyCamera.Extensions`（`AddEasyCamera`，配置委托为 `Action<CameraOptions>` 与 `Action<StreamOptions>`）；契约在 `Junevy.EasyCamera.Core.Abstractions`（`ICameraService`、`ICameraSdkSystem`、`ICameraInfo`、`IFrame`、`CameraInterfaceType`、`CameraLinkStatus`、`CameraResult`）、`Junevy.EasyCamera.Core.Common`（`BackpressureMode`、`IStreamOptions`）；手动构造的具体类在 `Junevy.EasyCamera.Common`（`CameraService`/`CameraManager`/`StreamManager`/`StreamOptions`/`AggregateCameraProvider`）；海康提供器在 `Junevy.EasyCamera.Vendors.HikVision`（`HikCameraProvider`）。`CameraInterfaceType` 成员：`GigE, Usb, GenTL, CameraLink, All, Unknown`。启用至少一个厂商时 DI 会注册 `ICameraSdkSystem` 单例（组合各厂商 SDK）；核心服务（`ICameraService` 等）均为单例注册，可安全注入 HostedService；`AddEasyCamera` 可重复调用不重复注册。
 
@@ -146,6 +146,9 @@ public partial class App : PrismApplication
 | 症状 | 原因/处理 |
 |---|---|
 | `BadImageFormatException` | 宿主非 x64，改 PlatformTarget=x64 |
+| `FileNotFoundException: Could not load file or assembly 'MvCameraControl.Net'` | 用了 ≤1.1.0 的包（厂商托管封装未随包分发）。升级到 1.1.1+；**并清理旧版本 NuGet 缓存**——NuGet 按 id+version 缓存，同版本重发不会被采用 |
+| `Initialize` 抛 `DllNotFoundException` / 枚举不到设备，但托管封装已在 | 厂商原生运行时未安装或不在 PATH；安装 MVS 并确认 `...\Common Files\MVS\Runtime\Win64_x64` 在 PATH |
+| 手工拷了厂商 DLL 到 exe 旁边仍然崩 | 对 .NET Core 无效（不走 deps.json 探测）；必须通过 NuGet 依赖分发 |
 | 枚举为空 | 相机未上电/网段不通/GigE 带宽防火墙；看 Trace 警告里的厂商错误码 |
 | 收不到帧 | 未 StartGrab；cameraKey 不匹配；订阅被异常摘除；触发模式下无触发信号 |
 | `OpenCamera` 报 "has been opened" | 该 key 已有连接，直接复用或先 Close |
@@ -153,7 +156,7 @@ public partial class App : PrismApplication
 | 画面卡顿/跳帧 | 看 `GetStreamStatistics(key).Dropped`：持续增长说明消费慢于采集，加大 `StreamCapacity`、减小 handler 工作量，或改用 `RejectNewest` 观察是否本来就处理不过来 |
 | 界面显示"被占用"但相机没插 | 区分 `Occupied` 与 `Unreachable`：升级到 1.1.0，旧版本把"枚举不到"也报成 Occupied |
 
-## 从 1.0.x 升级到 1.1.0（破坏性变更清单）
+## 从 1.0.x 升级到 1.1.0（API 破坏性变更清单）
 
 1. `ICamera.StopGrab()` 由 `void` 改为返回 `CameraResult`；自己实现 `ICamera` 的代码必须改签名。
 2. `ICamera` 新增 `LastError`；自己实现 `ICamera` 的代码必须补该成员。
@@ -163,3 +166,14 @@ public partial class App : PrismApplication
 6. `HikCamera.SetBufferCount`/`HikCameraInfo.SetDefinedName` 改为能力接口显式实现（改用 `IBufferConfigurable`/`INamedCameraInfo` 调用）。
 7. `CameraStreamSubscriber` 收为 internal（若曾直接使用请改为只用 `ICameraStream`）。
 8. `CameraLinkStatus` 扩为五态且 `Connected` 不再是 0：按数值判断状态的代码必须改为按枚举成员判断。
+
+## 从 1.0.x / 1.1.0 升级到 1.1.1（打包修复，必须做缓存清理）
+
+`≤1.1.0` 的包**没有**把厂商托管封装（`MvCameraControl.Net.dll`、`MVSDK_Net.dll`）打进包内，消费方还原后 `ICameraSdkSystem.Initialize()` 抛 `AggregateException`（内含 `type initializer ... threw an exception`）、`EnumerateCameras()` 抛 `FileNotFoundException('MvCameraControl.Net')`，未捕获即崩溃。
+
+1. 升级包版本到 1.1.1（或更高）。
+2. **清理旧版本缓存后重新还原**——NuGet 按 `id + version` 缓存，同版本重发不会被采用：
+   - 删 `%USERPROFILE%\.nuget\packages\junevy.easycamera*`，或
+   - 还原加 `--force`；若本机把缓存放在自定义 `RestorePackagesPath`（如 `D:\Documents\Nuget\RemoteCache`），须删该目录下的 `junevy.easycamera*`。
+3. 确认输出目录出现 `MvCameraControl.Net.dll` 与 `MVSDK_Net.dll`；若没有，说明拿到的仍是旧包。
+4. 仍需确认厂商**原生**运行时（MVS）已安装且 `...\Common Files\MVS\Runtime\Win64_x64` 在 PATH——这与托管封装是两回事。

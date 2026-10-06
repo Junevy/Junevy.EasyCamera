@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-10-06（1.1.1：厂商 SDK 托管封装随包分发——修复消费方必崩）
+
+起因：第三方程序崩溃，排障结论为"nupkg 未声明厂商 SDK 依赖"。**经端到端复现属实**，但根因与修法均需修正，详见 `docs/代码审查报告-2026-10-06.md` 第五节。
+
+- **P0：厂商托管封装程序集从未打进 NuGet 包**。主工程用 `<Reference HintPath=..\Libs\... Private=true>` 引用 `MvCameraControl.Net.dll` / `MVSDK_Net.dll`；`Private=true` 只让本仓库自己的输出目录拿到 DLL，`dotnet pack` 既不把文件引用放进包内、也不产生依赖声明。消费方还原后必然失败：`Initialize()` 抛 `AggregateException: The type initializer for 'HikCameraSdkSystem' threw an exception`，`EnumerateCameras()` 抛 `FileNotFoundException('MvCameraControl.Net, Version=4.5.0.2')`，未捕获即崩溃。
+- **修法**：新增无条件 `Pack` 项把两份厂商封装打进 `lib/net48;lib/net8.0`（保持 `Libs/` 单一来源，不复制 DLL 到工程目录）。刻意**不**采用"依赖 nuget.org 上的 `MvCameraControl.Net`"——那里只有第三方未验证转包（1.1.0/4.4.1.x/4.8.0.3），与本仓库 pin 的 **4.5.0.2** 版本对不上，依赖它等于引入供应链风险。
+- **两个已踩过的坑（写进 csproj 注释，避免复发）**：① `PackagePath="lib/"` 在包内已存在 `lib/<tfm>/` 时会被 NuGet 整体忽略，必须逐 TFM 写全；② 多目标项目打包走外层构建，此时 `$(TargetFramework)` 为空，按 TFM 分条件的 ItemGroup 恒不执行，必须用无条件分组 + 分号多路径。
+- **防复发：新增包内容守卫测试** `Tests/Packaging/PackageContentTests.cs`——定位仓库根、取最新 nupkg，断言两个 TFM 下均含 `MvCameraControl.Net.dll` 与 `MVSDK_Net.dll`（无产物时断言为 Inconclusive，不产生假失败）。这类缺陷单元测试天然测不到（本仓库全绿、消费方必崩），故直接校验打包产物。已验证：**移除打包规则后该测试立即失败**。
+- **版本递增到 1.1.1**：NuGet 按 `id + version` 缓存，消费方还原过 1.1.0 后重发同版本不会被采用（本次验证过程中即被该缓存误导过一次）。**升级方必须删除旧版本缓存或显式还原新版本。**
+- **文档**：README 新增"运行与安装前置条件"（含"手工拷贝 DLL 到 exe 旁边对 .NET Core 无效"这一常见误判）；SKILL.md 的环境与故障速查同步补充；AGENTS.md 记入构建约定。
+- **验收**：`dotnet build`（sln，Release，`--no-incremental`）0 错误 0 警告；`dotnet test` net48 124/124、net8.0 124/124；**端到端**：仅引用仓库真实产出的 1.1.1 nupkg、零手工拷贝 DLL，net8.0 与 net48 消费方均 `Initialize OK` + `EnumerateCameras OK`。
+
 ## 2026-10-06（1.1.0：审查修复三批 + 能力接口化 + 背压策略与丢帧可观测）
 
 审查报告见 `docs/代码审查报告-2026-10-06.md`。本轮为**破坏性变更**（1.0.1 → 1.1.0），面向消费方的迁移清单见 `skills/using-junevy-easycamera/SKILL.md`。

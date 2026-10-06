@@ -15,7 +15,7 @@
 		<!-- 开启生成时自动打包 -->
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<PackageId>Junevy.EasyCamera</PackageId>
-		<Version>1.1.0</Version>
+		<Version>1.1.1</Version>
 		<Authors>Junevy</Authors>
 		<Company>Junevy</Company>
 		<Description>
@@ -41,6 +41,24 @@
 			<HintPath>..\Libs\MVSDK_Net.dll</HintPath>
 			<Private>true</Private>
 		</Reference>
+	</ItemGroup>
+
+	<!--
+		厂商托管封装程序集必须打进 NuGet 包（2026-10-06 修复，消费方崩溃根因）：
+		<Reference HintPath> 只让本仓库自己的输出目录拿到 DLL，dotnet pack 既不会把文件引用
+		放进包内，也不会产生依赖声明 → 消费方还原后 Initialize 抛 TypeInitializationException、
+		EnumerateCameras 抛 FileNotFoundException('MvCameraControl.Net')。
+
+		两条硬约束（都踩过坑，改动前务必先读 docs/代码审查报告-2026-10-06.md 第五节（消费方打包验证））：
+		1) PackagePath 必须逐个 TFM 写全（lib/net48;lib/net8.0）。写成与 TFM 无关的 "lib/" 时，
+		   NuGet 会因为包内已存在 lib/<tfm>/ 目录而**整体忽略**根目录文件，消费方依旧拿不到。
+		2) 这里不能用 Condition="'$(TargetFramework)' == ..." 分组：多目标项目打包走外层构建，
+		   该时刻 $(TargetFramework) 为空，条件恒不成立，DLL 会被静默漏掉。
+		新增品牌时照此追加该厂商的托管封装程序集。
+	-->
+	<ItemGroup>
+		<None Include="..\Libs\MvCameraControl.Net.dll" Pack="true" PackagePath="lib/net48;lib/net8.0" Visible="false" />
+		<None Include="..\Libs\MVSDK_Net.dll" Pack="true" PackagePath="lib/net48;lib/net8.0" Visible="false" />
 	</ItemGroup>
 
 	<!-- net48 需要的 BCL 兼容包；net8.0 已内置于共享框架，无需引用 -->

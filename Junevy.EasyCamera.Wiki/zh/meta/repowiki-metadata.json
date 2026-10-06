@@ -1,0 +1,935 @@
+{
+  "wiki_repo": {
+    "id": "junevy-easycamera",
+    "name": "Junevy.EasyCamera",
+    "language": "zh",
+    "generator": "hand-authored",
+    "progress_status": "completed",
+    "wiki_present_status": "COMPLETED",
+    "last_commit_id": "deda788dff4cd7b92aaebd8cf95f010c6a54dfb5",
+    "branch": "master",
+    "working_tree": "1.1.0 三批修复与 1.1.1 打包修复已随 deda788 入库；复审时另有少量未提交的文档/注释改动（AGENTS.md 第 5 节、版本口径措辞、SKILL.md 版本提示）；2026-10-06 链路探测回退修复（internal IProbeAvailability，原已知未修复项 K2，未升版本）在分支 junevy/beautiful-rhodes-b9a236 的工作树中、尚未提交",
+    "library_version": "1.1.1",
+    "assembly_version": "1.1.1.0",
+    "repo_path": "D:\\Desktop\\doc\\Github_Repository\\Junevy.EasyCamera",
+    "exported_at": "2026-10-06T09:21:04Z",
+    "note_count": 41,
+    "baseline": "dotnet build sln -c Release --no-incremental：0 错误 0 警告；dotnet test：net48 130/130、net8.0 130/130（1.1.1 发布时 124；链路探测回退修复新增 6 项）",
+    "reviewed_at": "2026-10-06",
+    "review_note": "逐篇对照源码/测试/nupkg 复审；line_count 为复审时快照，随编辑漂移"
+  },
+  "conventions": {
+    "layout": "知识库首页.md（MOC） + zh/content/<分类>/<页面>.md + zh/meta/repowiki-metadata.json",
+    "page_structure": "H1 标题 → <cite> 引用块 → ## 目录 → 各章节（正文/mermaid）→ **章节来源**",
+    "cross_reference": "Obsidian wikilink [[分类/页面名]]（相对 zh/content/）",
+    "citation": "仅文件级 file:// 链接；不使用行号锚点",
+    "encoding": "UTF-8 无 BOM，LF"
+  },
+  "wiki_catalogs": [
+    {
+      "name": "项目概述",
+      "description": "project-overview",
+      "layer_level": 1,
+      "notes": [
+        {
+          "id": "jec-001",
+          "name": "快速开始指南",
+          "description": "project-overview-快速开始指南",
+          "path": "zh/content/项目概述/快速开始指南.md",
+          "layer_level": 2,
+          "line_count": 178,
+          "kk_dependent_files": [
+            "README.md",
+            "skills/using-junevy-easycamera/SKILL.md",
+            "Junevy.EasyCamera/Extensions/ServiceCollectionExtensions.cs",
+            "Junevy.EasyCamera/Extensions/CameraOptions.cs",
+            "Junevy.EasyCamera/Common/StreamOptions.cs",
+            "Junevy.EasyCamera/Common/EasyCameraBuilder.cs",
+            "Junevy.EasyCamera/Common/EasyCameraHost.cs",
+            "Junevy.EasyCamera/Common/CameraService.cs"
+          ]
+        },
+        {
+          "id": "jec-002",
+          "name": "技术栈概览",
+          "description": "project-overview-技术栈概览",
+          "path": "zh/content/项目概述/技术栈概览.md",
+          "layer_level": 2,
+          "line_count": 110,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Junevy.EasyCamera.csproj",
+            "Junevy.EasyCamera.Core/Junevy.EasyCamera.Core.csproj",
+            "Junevy.EasyCamera.Tests/Junevy.EasyCamera.Tests.csproj",
+            "Directory.Packages.props",
+            "global.json",
+            ".editorconfig",
+            "Junevy.EasyCamera/Properties/PlatformCompatibility.cs",
+            "Junevy.EasyCamera.Core/Properties/PlatformCompatibility.cs",
+            "Junevy.EasyCamera/Properties/AssemblyInfo.cs",
+            "CHANGELOG.md",
+            "AGENTS.md"
+          ]
+        },
+        {
+          "id": "jec-003",
+          "name": "运行与安装前置条件",
+          "description": "project-overview-运行与安装前置条件",
+          "path": "zh/content/项目概述/运行与安装前置条件.md",
+          "layer_level": 2,
+          "line_count": 89,
+          "kk_dependent_files": [
+            "README.md",
+            "skills/using-junevy-easycamera/SKILL.md",
+            "CHANGELOG.md",
+            "AGENTS.md",
+            "Junevy.EasyCamera/Junevy.EasyCamera.csproj",
+            "Junevy.EasyCamera.Tests/Packaging/PackageContentTests.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraProvider.cs"
+          ]
+        },
+        {
+          "id": "jec-004",
+          "name": "项目介绍与目标",
+          "description": "project-overview-项目介绍与目标",
+          "path": "zh/content/项目概述/项目介绍与目标.md",
+          "layer_level": 2,
+          "line_count": 119,
+          "kk_dependent_files": [
+            "README.md",
+            "AGENTS.md",
+            "CHANGELOG.md",
+            "Junevy.EasyCamera.sln",
+            "Junevy.EasyCamera/Junevy.EasyCamera.csproj",
+            "Junevy.EasyCamera.Core/Junevy.EasyCamera.Core.csproj",
+            "Junevy.EasyCamera.Tests/Junevy.EasyCamera.Tests.csproj",
+            "skills/using-junevy-easycamera/SKILL.md",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraSdkSystem.cs",
+            "docs/代码审查报告-2026-10-06.md"
+          ]
+        },
+        {
+          "id": "jec-005",
+          "name": "项目概述",
+          "description": "project-overview-项目概述",
+          "path": "zh/content/项目概述/项目概述.md",
+          "layer_level": 1,
+          "line_count": 62,
+          "kk_dependent_files": [
+            "README.md",
+            "AGENTS.md",
+            "CHANGELOG.md",
+            "Junevy.EasyCamera.sln",
+            "Junevy.EasyCamera/Junevy.EasyCamera.csproj"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "架构设计",
+      "description": "architecture",
+      "layer_level": 1,
+      "notes": [
+        {
+          "id": "jec-006",
+          "name": "帧数据流与生命周期",
+          "description": "architecture-帧数据流与生命周期",
+          "path": "zh/content/架构设计/帧数据流与生命周期.md",
+          "layer_level": 2,
+          "line_count": 184,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikFrameWrapper.cs",
+            "Junevy.EasyCamera/Common/CameraStream.cs",
+            "Junevy.EasyCamera/Common/CameraStreamSubscriber.cs",
+            "Junevy.EasyCamera/Common/StreamManager.cs",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IFrame.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICameraStream.cs",
+            "Junevy.EasyCamera.Core/Abstractions/FrameStreamStatistics.cs",
+            "AGENTS.md",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "id": "jec-007",
+          "name": "架构设计",
+          "description": "architecture-架构设计",
+          "path": "zh/content/架构设计/架构设计.md",
+          "layer_level": 1,
+          "line_count": 66,
+          "kk_dependent_files": [
+            "AGENTS.md",
+            "README.md",
+            "CHANGELOG.md",
+            "docs/代码审查报告-2026-10-06.md",
+            "docs/代码审查报告-2026-10-05.md",
+            "docs/稳定性审查报告-2026-09-15.md"
+          ]
+        },
+        {
+          "id": "jec-008",
+          "name": "核心设计模式",
+          "description": "architecture-核心设计模式",
+          "path": "zh/content/架构设计/核心设计模式.md",
+          "layer_level": 2,
+          "line_count": 146,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera.Core/Abstractions/ICameraProvider.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICamera.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ILinkStatusProbeProvider.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IBufferConfigurable.cs",
+            "Junevy.EasyCamera.Core/Abstractions/INamedCameraInfo.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IParameterSource.cs",
+            "Junevy.EasyCamera.Core/Common/ParameterReader.cs",
+            "Junevy.EasyCamera/Common/AggregateCameraProvider.cs",
+            "Junevy.EasyCamera/Common/CompositeCameraSdkSystem.cs",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera/Common/CameraStream.cs",
+            "Junevy.EasyCamera/Common/EasyCameraHost.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikFrameWrapper.cs",
+            "AGENTS.md",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "id": "jec-009",
+          "name": "配置与依赖注入",
+          "description": "architecture-配置与依赖注入",
+          "path": "zh/content/架构设计/配置与依赖注入.md",
+          "layer_level": 2,
+          "line_count": 123,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Extensions/ServiceCollectionExtensions.cs",
+            "Junevy.EasyCamera/Extensions/CameraOptions.cs",
+            "Junevy.EasyCamera/Common/StreamOptions.cs",
+            "Junevy.EasyCamera.Core/Common/IStreamOptions.cs",
+            "Junevy.EasyCamera/Common/EasyCameraBuilder.cs",
+            "Junevy.EasyCamera/Common/EasyCameraHost.cs",
+            "Junevy.EasyCamera/Common/StreamManager.cs",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraProvider.cs",
+            "skills/using-junevy-easycamera/SKILL.md"
+          ]
+        },
+        {
+          "id": "jec-010",
+          "name": "整体架构概览",
+          "description": "architecture-整体架构概览",
+          "path": "zh/content/架构设计/整体架构概览.md",
+          "layer_level": 2,
+          "line_count": 146,
+          "kk_dependent_files": [
+            "AGENTS.md",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera/Common/CameraManager.cs",
+            "Junevy.EasyCamera/Common/StreamManager.cs",
+            "Junevy.EasyCamera/Common/CameraStream.cs",
+            "Junevy.EasyCamera/Common/AggregateCameraProvider.cs",
+            "Junevy.EasyCamera/Common/CompositeCameraSdkSystem.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraProvider.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraSdkSystem.cs",
+            "Junevy.EasyCamera/Extensions/ServiceCollectionExtensions.cs",
+            "CHANGELOG.md"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "公共契约",
+      "description": "public-contracts",
+      "layer_level": 1,
+      "notes": [
+        {
+          "id": "jec-011",
+          "name": "公共契约",
+          "description": "public-contracts-公共契约",
+          "path": "zh/content/公共契约/公共契约.md",
+          "layer_level": 1,
+          "line_count": 52,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera.Core/Abstractions/ICamera.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICameraInfo.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICameraProvider.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICameraStream.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICameraSdkSystem.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IFrame.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ILineScanCamera.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IVendorCameraProvider.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IParameterSource.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ILinkStatusProbeProvider.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IBufferConfigurable.cs",
+            "Junevy.EasyCamera.Core/Abstractions/INamedCameraInfo.cs",
+            "Junevy.EasyCamera.Core/Abstractions/CameraResult.cs",
+            "Junevy.EasyCamera.Core/Abstractions/CameraLinkStatus.cs",
+            "Junevy.EasyCamera.Core/Abstractions/CameraInterfaceType.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ImagePixelFormat.cs",
+            "Junevy.EasyCamera.Core/Abstractions/FrameStreamStatistics.cs",
+            "Junevy.EasyCamera.Core/Common/ICameraService.cs",
+            "Junevy.EasyCamera.Core/Common/ICameraManager.cs",
+            "Junevy.EasyCamera.Core/Common/IStreamManager.cs",
+            "Junevy.EasyCamera.Core/Common/IStreamOptions.cs",
+            "Junevy.EasyCamera.Core/Common/CameraRemoveStatus.cs",
+            "Junevy.EasyCamera.Core/Common/BackpressureMode.cs",
+            "Junevy.EasyCamera.Core/Common/ParameterReader.cs"
+          ]
+        },
+        {
+          "id": "jec-012",
+          "name": "参数访问与错误通道",
+          "description": "public-contracts-参数访问与错误通道",
+          "path": "zh/content/公共契约/参数访问与错误通道.md",
+          "layer_level": 2,
+          "line_count": 134,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera.Core/Common/ParameterReader.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IParameterSource.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICamera.cs",
+            "Junevy.EasyCamera.Core/Common/ICameraService.cs",
+            "Junevy.EasyCamera.Core/Abstractions/CameraResult.cs",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Common/CameraManager.cs",
+            "Junevy.EasyCamera.Core/Common/ICameraManager.cs"
+          ]
+        },
+        {
+          "id": "jec-013",
+          "name": "能力接口与扩展点",
+          "description": "public-contracts-能力接口与扩展点",
+          "path": "zh/content/公共契约/能力接口与扩展点.md",
+          "layer_level": 2,
+          "line_count": 186,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera.Core/Abstractions/ICameraProvider.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ILinkStatusProbeProvider.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IBufferConfigurable.cs",
+            "Junevy.EasyCamera.Core/Abstractions/INamedCameraInfo.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IParameterSource.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IVendorCameraProvider.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ILineScanCamera.cs",
+            "Junevy.EasyCamera/Common/AggregateCameraProvider.cs",
+            "Junevy.EasyCamera/Common/IProbeAvailability.cs",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraProvider.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraInfo.cs",
+            "Junevy.EasyCamera/Vendors/IRayple/IRaypleCameraInfo.cs",
+            "Junevy.EasyCamera.Core/Common/ParameterReader.cs",
+            "Junevy.EasyCamera/Extensions/ServiceCollectionExtensions.cs"
+          ]
+        },
+        {
+          "id": "jec-014",
+          "name": "数据模型与枚举",
+          "description": "public-contracts-数据模型与枚举",
+          "path": "zh/content/公共契约/数据模型与枚举.md",
+          "layer_level": 2,
+          "line_count": 182,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera.Core/Abstractions/CameraResult.cs",
+            "Junevy.EasyCamera.Core/Abstractions/CameraLinkStatus.cs",
+            "Junevy.EasyCamera.Core/Abstractions/CameraInterfaceType.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ImagePixelFormat.cs",
+            "Junevy.EasyCamera.Core/Abstractions/FrameStreamStatistics.cs",
+            "Junevy.EasyCamera.Core/Common/CameraRemoveStatus.cs",
+            "Junevy.EasyCamera.Core/Common/BackpressureMode.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICameraInfo.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICameraSdkSystem.cs",
+            "Junevy.EasyCamera.Core/Common/ICameraManager.cs",
+            "Junevy.EasyCamera.Core/Common/IStreamManager.cs",
+            "Junevy.EasyCamera.Core/Common/IStreamOptions.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ILinkStatusProbeProvider.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICameraProvider.cs",
+            "Junevy.EasyCamera/Common/CameraManager.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikFrameWrapper.cs",
+            "Junevy.EasyCamera/Common/CameraStream.cs",
+            "Junevy.EasyCamera/Common/StreamOptions.cs",
+            "Junevy.EasyCamera/Common/CompositeCameraSdkSystem.cs"
+          ]
+        },
+        {
+          "id": "jec-015",
+          "name": "ICamera与ICameraStream契约",
+          "description": "public-contracts-ICamera与ICameraStream契约",
+          "path": "zh/content/公共契约/ICamera与ICameraStream契约.md",
+          "layer_level": 2,
+          "line_count": 140,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera.Core/Abstractions/ICamera.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICameraStream.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IFrame.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ILineScanCamera.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Common/CameraStream.cs",
+            "Junevy.EasyCamera/Common/CameraStreamSubscriber.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikFrameWrapper.cs"
+          ]
+        },
+        {
+          "id": "jec-016",
+          "name": "ICameraService门面",
+          "description": "public-contracts-ICameraService门面",
+          "path": "zh/content/公共契约/ICameraService门面.md",
+          "layer_level": 2,
+          "line_count": 143,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera.Core/Common/ICameraService.cs",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera/Common/StreamManager.cs",
+            "Junevy.EasyCamera/Common/CameraManager.cs"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "并发与资源",
+      "description": "concurrency-and-resources",
+      "layer_level": 1,
+      "notes": [
+        {
+          "id": "jec-017",
+          "name": "并发与资源",
+          "description": "concurrency-and-resources-并发与资源",
+          "path": "zh/content/并发与资源/并发与资源.md",
+          "layer_level": 1,
+          "line_count": 44,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikFrameWrapper.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraSdkSystem.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraProvider.cs",
+            "Junevy.EasyCamera/Vendors/IRayple/IRaypleCamera.cs",
+            "Junevy.EasyCamera/Vendors/IRayple/IRaypleFrameWrapper.cs",
+            "Junevy.EasyCamera/Common/CameraStream.cs",
+            "Junevy.EasyCamera/Common/CameraStreamSubscriber.cs",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera/Common/CameraManager.cs",
+            "Junevy.EasyCamera/Common/StreamManager.cs",
+            "Junevy.EasyCamera/Common/StreamOptions.cs",
+            "Junevy.EasyCamera/Common/CompositeCameraSdkSystem.cs",
+            "Junevy.EasyCamera.Tests/Vendors/HikCameraStateTests.cs",
+            "Junevy.EasyCamera.Tests/Vendors/HikCameraSdkSystemTests.cs",
+            "Junevy.EasyCamera.Tests/Vendors/HikVisionRegressionTests.cs",
+            "Junevy.EasyCamera.Tests/Common/CameraStreamBackpressureTests.cs",
+            "Junevy.EasyCamera.Tests/Abstractions/CameraStreamRegressionTests.cs"
+          ]
+        },
+        {
+          "id": "jec-018",
+          "name": "并发纪律",
+          "description": "concurrency-and-resources-并发纪律",
+          "path": "zh/content/并发与资源/并发纪律.md",
+          "layer_level": 2,
+          "line_count": 180,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Vendors/IRayple/IRaypleCamera.cs",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera/Common/CameraStream.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraSdkSystem.cs",
+            "Junevy.EasyCamera/Common/CompositeCameraSdkSystem.cs",
+            "Junevy.EasyCamera.Tests/Vendors/HikCameraStateTests.cs",
+            "Junevy.EasyCamera.Tests/Vendors/HikCameraSdkSystemTests.cs"
+          ]
+        },
+        {
+          "id": "jec-019",
+          "name": "帧所有权与内存",
+          "description": "concurrency-and-resources-帧所有权与内存",
+          "path": "zh/content/并发与资源/帧所有权与内存.md",
+          "layer_level": 2,
+          "line_count": 162,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Vendors/HikVision/HikFrameWrapper.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Common/CameraStream.cs",
+            "Junevy.EasyCamera/Common/CameraStreamSubscriber.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IFrame.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICameraStream.cs",
+            "Junevy.EasyCamera/Vendors/IRayple/IRaypleFrameWrapper.cs"
+          ]
+        },
+        {
+          "id": "jec-020",
+          "name": "背压与丢帧统计",
+          "description": "concurrency-and-resources-背压与丢帧统计",
+          "path": "zh/content/并发与资源/背压与丢帧统计.md",
+          "layer_level": 2,
+          "line_count": 162,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Common/CameraStream.cs",
+            "Junevy.EasyCamera/Common/CameraStreamSubscriber.cs",
+            "Junevy.EasyCamera/Common/StreamOptions.cs",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera.Core/Abstractions/FrameStreamStatistics.cs",
+            "Junevy.EasyCamera.Core/Common/BackpressureMode.cs",
+            "Junevy.EasyCamera.Core/Common/IStreamOptions.cs",
+            "Junevy.EasyCamera.Tests/Common/CameraStreamBackpressureTests.cs",
+            "Junevy.EasyCamera.Tests/Abstractions/CameraStreamRegressionTests.cs"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "厂商适配",
+      "description": "vendor-adapters",
+      "layer_level": 1,
+      "notes": [
+        {
+          "id": "jec-021",
+          "name": "厂商能力实现指南",
+          "description": "vendor-adapters-厂商能力实现指南",
+          "path": "zh/content/厂商适配/厂商能力实现指南.md",
+          "layer_level": 2,
+          "line_count": 162,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera.Core/Abstractions/ILinkStatusProbeProvider.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IBufferConfigurable.cs",
+            "Junevy.EasyCamera.Core/Abstractions/INamedCameraInfo.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IParameterSource.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICameraProvider.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IVendorCameraProvider.cs",
+            "Junevy.EasyCamera.Core/Abstractions/CameraLinkStatus.cs",
+            "Junevy.EasyCamera.Core/Common/IStreamOptions.cs",
+            "Junevy.EasyCamera.Core/Common/ParameterReader.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraProvider.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraInfo.cs",
+            "Junevy.EasyCamera/Common/AggregateCameraProvider.cs",
+            "AGENTS.md",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "id": "jec-022",
+          "name": "厂商适配",
+          "description": "vendor-adapters-厂商适配",
+          "path": "zh/content/厂商适配/厂商适配.md",
+          "layer_level": 1,
+          "line_count": 46,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraProvider.cs",
+            "Junevy.EasyCamera/Vendors/IRayple/IRaypleCamera.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICameraProvider.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IVendorCameraProvider.cs",
+            "Junevy.EasyCamera/Extensions/ServiceCollectionExtensions.cs",
+            "AGENTS.md",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "id": "jec-023",
+          "name": "海康适配",
+          "description": "vendor-adapters-海康适配",
+          "path": "zh/content/厂商适配/海康适配.md",
+          "layer_level": 2,
+          "line_count": 171,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikFrameWrapper.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraProvider.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraInfo.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraSdkSystem.cs",
+            "Junevy.EasyCamera.Tests/Vendors/HikCameraStateTests.cs",
+            "Junevy.EasyCamera.Tests/Vendors/HikVisionRegressionTests.cs",
+            "Junevy.EasyCamera.Tests/Vendors/HikCameraSdkSystemTests.cs",
+            "Junevy.EasyCamera/Common/AggregateCameraProvider.cs",
+            "Junevy.EasyCamera.Core/Common/ParameterReader.cs",
+            "Libs/MvCameraControl.Net.dll",
+            "AGENTS.md"
+          ]
+        },
+        {
+          "id": "jec-024",
+          "name": "新增品牌指南",
+          "description": "vendor-adapters-新增品牌指南",
+          "path": "zh/content/厂商适配/新增品牌指南.md",
+          "layer_level": 2,
+          "line_count": 160,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikFrameWrapper.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraProvider.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraSdkSystem.cs",
+            "Junevy.EasyCamera/Vendors/IRayple/IRaypleCamera.cs",
+            "Junevy.EasyCamera/Extensions/ServiceCollectionExtensions.cs",
+            "Junevy.EasyCamera/Extensions/CameraOptions.cs",
+            "Junevy.EasyCamera/Common/EasyCameraBuilder.cs",
+            "Junevy.EasyCamera/Junevy.EasyCamera.csproj",
+            "Junevy.EasyCamera.Tests/Junevy.EasyCamera.Tests.csproj",
+            "AGENTS.md",
+            "README.md",
+            "skills/using-junevy-easycamera/SKILL.md"
+          ]
+        },
+        {
+          "id": "jec-025",
+          "name": "IRayple现状",
+          "description": "vendor-adapters-IRayple现状",
+          "path": "zh/content/厂商适配/IRayple现状.md",
+          "layer_level": 2,
+          "line_count": 101,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Vendors/IRayple/IRaypleCamera.cs",
+            "Junevy.EasyCamera/Vendors/IRayple/IRaypleFrameWrapper.cs",
+            "Junevy.EasyCamera/Vendors/IRayple/IRaypleCameraProvider.cs",
+            "Junevy.EasyCamera/Vendors/IRayple/IRaypleCameraInfo.cs",
+            "Junevy.EasyCamera/Vendors/IRayple/IRaypleCameraSdkSystem.cs",
+            "Junevy.EasyCamera/Extensions/ServiceCollectionExtensions.cs",
+            "Junevy.EasyCamera/Common/EasyCameraBuilder.cs",
+            "Junevy.EasyCamera/Junevy.EasyCamera.csproj",
+            "README.md",
+            "CHANGELOG.md"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "构建与发布",
+      "description": "build-and-packaging",
+      "layer_level": 1,
+      "notes": [
+        {
+          "id": "jec-026",
+          "name": "包内容守卫",
+          "description": "build-and-packaging-包内容守卫",
+          "path": "zh/content/构建与发布/包内容守卫.md",
+          "layer_level": 2,
+          "line_count": 110,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera.Tests/Packaging/PackageContentTests.cs",
+            "Junevy.EasyCamera.Tests/Junevy.EasyCamera.Tests.csproj",
+            "Junevy.EasyCamera/Junevy.EasyCamera.csproj",
+            "Directory.Packages.props",
+            "docs/代码审查报告-2026-10-06.md",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "id": "jec-027",
+          "name": "构建与发布",
+          "description": "build-and-packaging-构建与发布",
+          "path": "zh/content/构建与发布/构建与发布.md",
+          "layer_level": 1,
+          "line_count": 60,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Junevy.EasyCamera.csproj",
+            "Junevy.EasyCamera.Core/Junevy.EasyCamera.Core.csproj",
+            "Junevy.EasyCamera.Tests/Junevy.EasyCamera.Tests.csproj",
+            "Directory.Packages.props",
+            "global.json",
+            "Junevy.EasyCamera.Tests/Packaging/PackageContentTests.cs",
+            "Junevy.EasyCamera/Properties/AssemblyInfo.cs",
+            "Junevy.EasyCamera/Properties/PlatformCompatibility.cs",
+            "docs/代码审查报告-2026-10-06.md",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "id": "jec-028",
+          "name": "消费方端到端验证",
+          "description": "build-and-packaging-消费方端到端验证",
+          "path": "zh/content/构建与发布/消费方端到端验证.md",
+          "layer_level": 2,
+          "line_count": 162,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Junevy.EasyCamera.csproj",
+            "Junevy.EasyCamera/Extensions/ServiceCollectionExtensions.cs",
+            "Junevy.EasyCamera/Extensions/CameraOptions.cs",
+            "Junevy.EasyCamera.Tests/Packaging/PackageContentTests.cs",
+            "README.md",
+            "docs/代码审查报告-2026-10-06.md",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "id": "jec-029",
+          "name": "NuGet打包规则",
+          "description": "build-and-packaging-NuGet打包规则",
+          "path": "zh/content/构建与发布/NuGet打包规则.md",
+          "layer_level": 2,
+          "line_count": 146,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Junevy.EasyCamera.csproj",
+            "Junevy.EasyCamera.Tests/Packaging/PackageContentTests.cs",
+            "Junevy.EasyCamera/Properties/AssemblyInfo.cs",
+            "Junevy.EasyCamera/Properties/PlatformCompatibility.cs",
+            "Directory.Packages.props",
+            "global.json",
+            "docs/代码审查报告-2026-10-06.md",
+            "README.md",
+            "CHANGELOG.md"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "测试",
+      "description": "testing",
+      "layer_level": 1,
+      "notes": [
+        {
+          "id": "jec-030",
+          "name": "回归清单与测试替身",
+          "description": "testing-回归清单与测试替身",
+          "path": "zh/content/测试/回归清单与测试替身.md",
+          "layer_level": 2,
+          "line_count": 193,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera.Tests/Common/CameraManagerServiceRegressionTests.cs",
+            "Junevy.EasyCamera.Tests/Common/CameraServiceProbeTests.cs",
+            "Junevy.EasyCamera.Tests/Common/AggregateCameraProviderTests.cs",
+            "Junevy.EasyCamera.Tests/Common/CameraStreamBackpressureTests.cs",
+            "Junevy.EasyCamera.Tests/Abstractions/CameraStreamTests.cs",
+            "Junevy.EasyCamera.Tests/Abstractions/CameraStreamRegressionTests.cs",
+            "Junevy.EasyCamera.Tests/Vendors/HikCameraStateTests.cs",
+            "Junevy.EasyCamera.Tests/Vendors/HikVisionRegressionTests.cs",
+            "Junevy.EasyCamera.Tests/Vendors/HikCameraSdkSystemTests.cs",
+            "Junevy.EasyCamera.Tests/Packaging/PackageContentTests.cs",
+            "Junevy.EasyCamera.Tests/Mocks/MockCamera.cs",
+            "Junevy.EasyCamera.Tests/Mocks/MockFrame.cs",
+            "Junevy.EasyCamera.Tests/Mocks/MockCameraProvider.cs",
+            "Junevy.EasyCamera.Tests/Common/EasyCameraBuilderTests.cs",
+            "Junevy.EasyCamera.Tests/Junevy.EasyCamera.Tests.csproj"
+          ]
+        },
+        {
+          "id": "jec-031",
+          "name": "测试",
+          "description": "testing-测试",
+          "path": "zh/content/测试/测试.md",
+          "layer_level": 1,
+          "line_count": 121,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera.Tests/Junevy.EasyCamera.Tests.csproj",
+            "Junevy.EasyCamera.Tests/Packaging/PackageContentTests.cs",
+            "Junevy.EasyCamera.Tests/Properties/PlatformCompatibility.cs",
+            "Directory.Packages.props",
+            "global.json",
+            "CHANGELOG.md",
+            "AGENTS.md",
+            "README.md",
+            "Junevy.EasyCamera.Tests/Common/CameraManagerServiceRegressionTests.cs"
+          ]
+        },
+        {
+          "id": "jec-032",
+          "name": "测试工程与运行方式",
+          "description": "testing-测试工程与运行方式",
+          "path": "zh/content/测试/测试工程与运行方式.md",
+          "layer_level": 2,
+          "line_count": 170,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera.Tests/Junevy.EasyCamera.Tests.csproj",
+            "Junevy.EasyCamera.Tests/Properties/PlatformCompatibility.cs",
+            "Junevy.EasyCamera.Tests/Properties/AssemblyInfo.cs",
+            "Directory.Packages.props",
+            "global.json",
+            "README.md",
+            "AGENTS.md",
+            "Junevy.EasyCamera.Tests/Vendors/HikVisionRegressionTests.cs",
+            "Junevy.EasyCamera.Tests/Packaging/PackageContentTests.cs",
+            "Junevy.EasyCamera.Tests/Mocks/MockCamera.cs",
+            "Junevy.EasyCamera.Tests/Vendors/HikCameraStateTests.cs",
+            "Junevy.EasyCamera.Tests/Vendors/HikCameraSdkSystemTests.cs"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "故障排查",
+      "description": "troubleshooting",
+      "layer_level": 1,
+      "notes": [
+        {
+          "id": "jec-033",
+          "name": "性能与内存排查",
+          "description": "troubleshooting-性能与内存排查",
+          "path": "zh/content/故障排查/性能与内存排查.md",
+          "layer_level": 2,
+          "line_count": 180,
+          "kk_dependent_files": [
+            "Junevy.EasyCamera/Vendors/HikVision/HikFrameWrapper.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCamera.cs",
+            "Junevy.EasyCamera/Common/CameraStream.cs",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera/Common/StreamOptions.cs",
+            "Junevy.EasyCamera.Core/Abstractions/FrameStreamStatistics.cs",
+            "Junevy.EasyCamera.Core/Common/BackpressureMode.cs",
+            "Junevy.EasyCamera.Core/Abstractions/IFrame.cs",
+            "Junevy.EasyCamera.Core/Abstractions/ICameraStream.cs",
+            "Junevy.EasyCamera.Tests/Common/CameraStreamBackpressureTests.cs",
+            "AGENTS.md",
+            "Junevy.EasyCamera.Tests/Vendors/HikVisionRegressionTests.cs",
+            "Junevy.EasyCamera.Tests/Abstractions/CameraStreamTests.cs",
+            "Junevy.EasyCamera.Tests/Abstractions/CameraStreamRegressionTests.cs"
+          ]
+        },
+        {
+          "id": "jec-034",
+          "name": "故障排查",
+          "description": "troubleshooting-故障排查",
+          "path": "zh/content/故障排查/故障排查.md",
+          "layer_level": 1,
+          "line_count": 67,
+          "kk_dependent_files": [
+            "README.md",
+            "CHANGELOG.md",
+            "AGENTS.md",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera/Common/StreamOptions.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikFrameWrapper.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraProvider.cs",
+            "skills/using-junevy-easycamera/SKILL.md"
+          ]
+        },
+        {
+          "id": "jec-035",
+          "name": "常见故障与误判",
+          "description": "troubleshooting-常见故障与误判",
+          "path": "zh/content/故障排查/常见故障与误判.md",
+          "layer_level": 2,
+          "line_count": 177,
+          "kk_dependent_files": [
+            "README.md",
+            "CHANGELOG.md",
+            "AGENTS.md",
+            "Junevy.EasyCamera/Junevy.EasyCamera.csproj",
+            "Junevy.EasyCamera/Common/CameraService.cs",
+            "Junevy.EasyCamera/Common/CameraStream.cs",
+            "Junevy.EasyCamera/Common/StreamManager.cs",
+            "Junevy.EasyCamera/Vendors/HikVision/HikCameraProvider.cs",
+            "Junevy.EasyCamera/Properties/PlatformCompatibility.cs",
+            "Junevy.EasyCamera.Tests/Junevy.EasyCamera.Tests.csproj",
+            "Junevy.EasyCamera.Core/Abstractions/CameraLinkStatus.cs",
+            "skills/using-junevy-easycamera/SKILL.md",
+            "Junevy.EasyCamera.Tests/Common/CameraManagerServiceRegressionTests.cs"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Agent协作",
+      "description": "agent-collaboration",
+      "layer_level": 1,
+      "notes": [
+        {
+          "id": "jec-036",
+          "name": "开发约定与验收基线",
+          "description": "agent-collaboration-开发约定与验收基线",
+          "path": "zh/content/Agent协作/开发约定与验收基线.md",
+          "layer_level": 2,
+          "line_count": 114,
+          "kk_dependent_files": [
+            "AGENTS.md",
+            "CHANGELOG.md",
+            "skills/using-junevy-easycamera/SKILL.md",
+            "Junevy.EasyCamera/Properties/AssemblyInfo.cs",
+            "Junevy.EasyCamera/Junevy.EasyCamera.csproj",
+            "Junevy.EasyCamera.Tests/Junevy.EasyCamera.Tests.csproj",
+            "Directory.Packages.props",
+            "global.json"
+          ]
+        },
+        {
+          "id": "jec-037",
+          "name": "文档同步清单与任务配方",
+          "description": "agent-collaboration-文档同步清单与任务配方",
+          "path": "zh/content/Agent协作/文档同步清单与任务配方.md",
+          "layer_level": 2,
+          "line_count": 148,
+          "kk_dependent_files": [
+            "AGENTS.md",
+            "CHANGELOG.md",
+            "README.md",
+            "skills/using-junevy-easycamera/SKILL.md",
+            ".zcode/skills/using-junevy-easycamera/SKILL.md",
+            "Junevy.EasyCamera/Junevy.EasyCamera.csproj",
+            "Junevy.EasyCamera.Tests/Junevy.EasyCamera.Tests.csproj",
+            "Junevy.EasyCamera.Tests/Packaging/PackageContentTests.cs",
+            "docs/代码审查报告-2026-10-06.md",
+            "docs/superpowers/plans/2026-10-05-review-findings-fix.md"
+          ]
+        },
+        {
+          "id": "jec-038",
+          "name": "Agent协作",
+          "description": "agent-collaboration-Agent协作",
+          "path": "zh/content/Agent协作/Agent协作.md",
+          "layer_level": 1,
+          "line_count": 60,
+          "kk_dependent_files": [
+            "AGENTS.md",
+            "CHANGELOG.md",
+            "README.md",
+            "skills/using-junevy-easycamera/SKILL.md",
+            "docs/代码审查报告-2026-10-06.md",
+            "docs/代码审查报告-2026-10-05.md",
+            "docs/稳定性审查报告-2026-09-15.md"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "变更与决策",
+      "description": "decisions-and-history",
+      "layer_level": 1,
+      "notes": [
+        {
+          "id": "jec-039",
+          "name": "设计决策记录",
+          "description": "decisions-and-history-设计决策记录",
+          "path": "zh/content/变更与决策/设计决策记录.md",
+          "layer_level": 2,
+          "line_count": 154,
+          "kk_dependent_files": [
+            "AGENTS.md",
+            "CHANGELOG.md",
+            "docs/代码审查报告-2026-10-06.md",
+            "docs/代码审查报告-2026-10-05.md",
+            "docs/稳定性审查报告-2026-09-15.md",
+            "skills/using-junevy-easycamera/SKILL.md"
+          ]
+        },
+        {
+          "id": "jec-040",
+          "name": "变更与决策",
+          "description": "decisions-and-history-变更与决策",
+          "path": "zh/content/变更与决策/变更与决策.md",
+          "layer_level": 1,
+          "line_count": 56,
+          "kk_dependent_files": [
+            "AGENTS.md",
+            "CHANGELOG.md",
+            "docs/代码审查报告-2026-10-06.md",
+            "docs/代码审查报告-2026-10-05.md",
+            "docs/稳定性审查报告-2026-09-15.md",
+            "skills/using-junevy-easycamera/SKILL.md"
+          ]
+        },
+        {
+          "id": "jec-041",
+          "name": "审查与修复记录",
+          "description": "decisions-and-history-审查与修复记录",
+          "path": "zh/content/变更与决策/审查与修复记录.md",
+          "layer_level": 2,
+          "line_count": 231,
+          "kk_dependent_files": [
+            "CHANGELOG.md",
+            "AGENTS.md",
+            "docs/稳定性审查报告-2026-09-15.md",
+            "docs/代码审查报告-2026-10-05.md",
+            "docs/代码审查报告-2026-10-06.md",
+            "docs/superpowers/plans/2026-09-14-hikvision-public-layer-bugfix.md",
+            "docs/superpowers/plans/2026-10-05-review-findings-fix.md",
+            "Junevy.EasyCamera.Tests/Junevy.EasyCamera.Tests.csproj"
+          ]
+        }
+      ]
+    }
+  ]
+}

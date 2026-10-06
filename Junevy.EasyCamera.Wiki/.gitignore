@@ -1,0 +1,9 @@
+# Obsidian 的会话级 UI 状态：窗口布局、展开的页签、打开的文件。
+# 每开一次会话就变，纳入版本控制只会产生无意义 diff。
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+
+# Obsidian 崩溃恢复与本地索引
+.obsidian/plugins/*/data.json
+.trash/

@@ -14,6 +14,7 @@
 - 双目标框架：`net48` + `net8.0`（net8.0 下声明 Windows 平台）；运行时须 **x64**（厂商 SDK 为 AMD64 专用）。
 - 解决方案结构：`Junevy.EasyCamera.Core`（抽象与契约）/ `Junevy.EasyCamera`（DI 与厂商适配）/ `Junevy.EasyCamera.Tests`（x64 测试宿主）。
 - 厂商 SDK DLL 位于仓库 `Libs/`，构建自包含；.NET SDK 版本由 `global.json`（9.0.316）固定，包版本由 `Directory.Packages.props` 中央管理。
+- 版本 1.1.0 起：厂商独有能力（可达性探测 / 采集缓冲配置 / 设备改名）以**能力接口**表达（`ILinkStatusProbeProvider`、`IBufferConfigurable`、`INamedCameraInfo`），新增能力不再破坏既有实现者。
 - 详见 [AGENTS.md](AGENTS.md)（项目开发约定）与 [docs/](docs/)（审查/计划文档）。
 
 ## 构建
@@ -29,7 +30,13 @@ dotnet test .\Junevy.EasyCamera.Tests\Junevy.EasyCamera.Tests.csproj -c Release 
 // 1. 注册（Host/ServiceProvider 场景）
 services.AddEasyCamera(
     options => options.EnableHikVision = true,
-    stream => stream.StreamCapacity = 5);   // 每个订阅者的有界帧缓存（帧数）
+    stream =>
+    {
+        stream.StreamCapacity = 5;                        // 每个订阅者的有界帧缓存（帧数）
+        stream.BackpressureMode = BackpressureMode.DropOldest; // 队列满时丢最旧（保留最新画面）
+        // stream.BackpressureMode = BackpressureMode.RejectNewest; // 或：拒收新帧、按序处理已入队帧
+        stream.CameraBufferCapacity = 10;                 // 采集端缓冲（仅部分厂商支持）
+    });
 
 // 2. 解析并初始化 SDK（进程级一次；内部按实例引用计数，Finalize 在引用归零时执行）
 var sdk = provider.GetRequiredService<ICameraSdkSystem>();
@@ -66,7 +73,10 @@ try
     cameraService.SetTrigger("cam-1", "Line1", enableTrigger: true); // 设置后需重新 StartGrab
     cameraService.StartGrab("cam-1");
 
-    // 6. 关闭相机（帧流保留，重开同名 key 后订阅自动继续生效）
+    // 6. 排查丢帧：统计随流累计，Dropped 持续增长说明消费慢于采集
+    var stats = cameraService.GetStreamStatistics("cam-1");   // Published / Delivered / Dropped
+
+    // 7. 关闭相机（帧流保留，重开同名 key 后订阅自动继续生效）
     cameraService.Close("cam-1");
 }
 finally
@@ -83,7 +93,7 @@ using Junevy.EasyCamera;
 using var host = EasyCamera.Create(b => b.EnableHikVision()
                                              .WithStreamOptions(o => o.StreamCapacity = 5));
 host.Sdk.Initialize();
-// host.Service 用法与 DI 方式的 3–6 步相同
+// host.Service 用法与 DI 方式的 3–7 步相同
 host.Dispose();   // 幂等；释放顺序：相机 → 帧流 → SDK
 ```
 
@@ -97,12 +107,31 @@ host.Dispose();   // 幂等；释放顺序：相机 → 帧流 → SDK
 - **分发为引用计数浅共享**：`Publish` 对每个订阅者只做 `AddRef + TryWrite` 同一实例，不逐订阅者深拷贝；订阅者为只读消费者，禁止修改帧数据。
 - 帧引用计数初始为 1（发布方初始引用，由流持有并释放），每入队一个订阅者 +1；**引用归零时由最后一个释放者回收非托管缓冲**，且仅回收一次。
 - 需要异步保帧：在 handler 返回前调用 `frame.AddRef()`，使用完成后对应 `Dispose()`。
-- 优先使用 `frame.Data`（懒缓存托管副本，已释放帧仍可安全读取）；`frame.PixelDataPtr` 在帧释放后即失效。
-- 订阅 Channel 为有界队列（DropOldest）：消费慢时旧帧被淘汰并立即释放，不阻塞采集、不压垮上游。
+- 优先使用 `frame.Data`（懒缓存托管副本，已释放帧仍可安全读取）；`frame.PixelDataPtr` 在帧释放后返回 `IntPtr.Zero`，禁止保存或跨 handler 使用。
+- 帧的宽高/步长/像素格式在构造时快照，读取不再触碰原生内存；`Data`/`GetBitmap` 与引用计数互斥，帧释放后不会读到已释放的原生内存。
+- 订阅队列为有界队列，**背压策略由 `StreamOptions.BackpressureMode` 决定**：`DropOldest`（默认，丢最旧、保留最新画面）与 `RejectNewest`（队列满时拒收新帧、按序处理已入队帧）。两者都不阻塞采集线程。
 - 同 Key 重复订阅会**原子替换**旧订阅者；未提供 `whenException` 时，handler 异常会终止该订阅并自动摘除（帧仍会释放）。
+- 丢帧不再静默：`ICameraService.GetStreamStatistics(cameraKey)` 返回累计 `Published/Delivered/Dropped`。
+
+## 相机链路状态（连接对话框/状态徽章用）
+
+`ICameraService.ProbeCameraLinkStatus(info, ct)` 返回五态（`Junevy.EasyCamera.Core.Abstractions.CameraLinkStatus`）：
+
+| 状态 | 含义 |
+|---|---|
+| `Unknown`（默认，=0） | 未能判定：未探测、已取消，或缺少可用的探测手段 |
+| `Connected` | 本进程已持有该相机连接（任意 cameraKey 注册且序列号匹配） |
+| `Idle` | 在线、未被本进程持有且可达——当前可以打开 |
+| `Occupied` | 在线但不可达：被其它客户端独占 |
+| `Unreachable` | 重新枚举中不存在：掉线、被拔出、未上电 |
+
+- 非侵入优先：海康走 `DeviceEnumerator.IsDeviceAccessible`（独占模式，与打开权限一致）；厂商不支持时回退侵入式 `probe:{serial}` 开关探测，探测用的相机连接与帧流都不留在注册表中。
+- 探测会触发厂商枚举（已按 `info.InterfaceType` 缩小范围），**应在后台线程调用**。
+- 本进程独占持有的相机会令可达性查询返回 false，因此库内先查连接注册表再问厂商。
 
 ## 路线图
 
 - Basler（Pylon）适配、IRayple 补齐（同步模型、回调排空、帧引用防护）
 - Cognex 适配调研
 - 线阵相机扩展接口 `ILineScanCamera` 落地（行触发、行计数）
+- 帧托管副本改用 `ArrayPool<byte>.Shared` 租用，降低 LOH 压力（需先确定 `IFrame.Data` 的长度契约）

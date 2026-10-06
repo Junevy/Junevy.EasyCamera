@@ -3,6 +3,7 @@ using Junevy.EasyCamera.Core.Common;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Junevy.EasyCamera.Common
@@ -10,7 +11,7 @@ namespace Junevy.EasyCamera.Common
     /// <summary>
     /// 相机服务类，提供相机枚举、打开关闭、取流订阅与参数访问的门面入口
     /// </summary>
-    public class CameraService(ICameraProvider provider, ICameraManager cameraManager, IStreamManager streamManager, StreamOptions streamOptions = null) : ICameraService
+    public class CameraService(ICameraProvider provider, ICameraManager cameraManager, IStreamManager streamManager, IStreamOptions streamOptions = null) : ICameraService
     {
         private const string ErrorMsg = "Camera not open or found";
         private readonly ConcurrentDictionary<string, object> cameraKeyLocks = new();
@@ -18,10 +19,10 @@ namespace Junevy.EasyCamera.Common
         private readonly ICameraProvider provider = provider;
         private readonly ICameraManager cameraManager = cameraManager;
         private readonly IStreamManager streamManager = streamManager;
-        private readonly StreamOptions streamOptions = streamOptions ?? new StreamOptions();
+        private readonly IStreamOptions streamOptions = streamOptions ?? new StreamOptions();
 
         /// <summary>
-        /// 相机 key 级操作锁：OpenCamera/StartGrab/StopGrab/SetTrigger 按 key 串行。
+        /// 相机 key 级操作锁：OpenCamera/Close/StartGrab/StopGrab/SetTrigger 按 key 串行。
         /// 锁对象按 key 只增不减：key 数量量级 ≈ 相机数（小且稳定），可接受；
         /// 按引用计数删除会在 Close/Open 竞态窗口重开两个锁对象，得不偿失。
         /// </summary>
@@ -110,17 +111,17 @@ namespace Junevy.EasyCamera.Common
         /// 订阅指定相机的图像帧数据
         /// </summary>
         /// <param name="cameraKey">打开相机时使用的Key</param>
-        /// <param name="subKey">订阅者标识</param>
+        /// <param name="subscriberKey">订阅者标识</param>
         /// <param name="processFrame">处理图像帧的回调函数</param>
         /// <param name="whenException">异常发生处理回调方法，当不提供异常处理回调时，订阅工作线程将终止</param>
-        /// <param name="capacity">订阅Channel的边界（容量），小于等于0时使用 <see cref="StreamOptions.StreamCapacity" /></param>
+        /// <param name="capacity">订阅Channel的边界（容量），小于等于0时使用 <see cref="IStreamOptions.StreamCapacity" /></param>
         /// <returns>
         /// 是否成功订阅
         /// </returns>
-        public bool SubscribeFrameStream(string cameraKey, string subKey, Func<string, IFrame, Task> processFrame, Action<Exception> whenException = null, int capacity = 0)
+        public bool SubscribeFrameStream(string cameraKey, string subscriberKey, Func<string, IFrame, Task> processFrame, Action<Exception> whenException = null, int capacity = 0)
         {
             if (processFrame == null) return false;
-            if (string.IsNullOrEmpty(cameraKey) || string.IsNullOrEmpty(subKey)) return false;
+            if (string.IsNullOrEmpty(cameraKey) || string.IsNullOrEmpty(subscriberKey)) return false;
 
             if (!streamManager.GetStream(cameraKey, out var stream)) return false;
 
@@ -129,7 +130,7 @@ namespace Junevy.EasyCamera.Common
 
             try
             {
-                stream.Subscribe(subKey, capacity, processFrame, whenException);
+                stream.Subscribe(subscriberKey, capacity, processFrame, whenException);
                 return true;
             }
             catch (ObjectDisposedException)
@@ -143,17 +144,17 @@ namespace Junevy.EasyCamera.Common
         /// 取消订阅指定相机的图像帧数据
         /// </summary>
         /// <param name="cameraKey">打开相机时使用的Key</param>
-        /// <param name="subKey">订阅者标识符</param>
+        /// <param name="subscriberKey">订阅者标识符</param>
         /// <returns>
         /// 是否成功取消订阅
         /// </returns>
-        public bool UnsubscribeFrameStream(string cameraKey, string subKey)
+        public bool UnsubscribeFrameStream(string cameraKey, string subscriberKey)
         {
-            if (string.IsNullOrEmpty(cameraKey) || string.IsNullOrEmpty(subKey)) return false;
+            if (string.IsNullOrEmpty(cameraKey) || string.IsNullOrEmpty(subscriberKey)) return false;
 
             if (!streamManager.GetStream(cameraKey, out var stream)) return false;
 
-            return stream.Unsubscribe(subKey);
+            return stream.Unsubscribe(subscriberKey);
         }
 
         /// <summary>
@@ -183,9 +184,23 @@ namespace Junevy.EasyCamera.Common
                 }
                 catch (Exception e)
                 {
-                    camera?.StopGrab();
+                    SafeStopGrab(camera);
                     return CameraResult.Fail(-2, e.Message);
                 }
+            }
+        }
+
+        /// <summary>
+        /// 异常补偿路径上的停流：失败不再向上抛出，避免掩盖原始异常
+        /// </summary>
+        private static void SafeStopGrab(ICamera camera)
+        {
+            try
+            {
+                camera.StopGrab();
+            }
+            catch
+            {
             }
         }
 
@@ -206,9 +221,12 @@ namespace Junevy.EasyCamera.Common
                 if (!cameraManager.TryGet(cameraKey, out var camera) || !camera.IsConnected)
                     return CameraResult.Fail(-1, ErrorMsg);
 
-                camera.StopGrab();
+                var result = camera.StopGrab();
+                if (!result.IsSuccess)
+                    return result;
+
                 return camera.IsGrabbing
-                    ? CameraResult.Fail(-1, "Camera stop grabbing failed")
+                    ? CameraResult.Fail(-1, camera.LastError ?? "Camera stop grabbing failed")
                     : CameraResult.Success(0);
             }
         }
@@ -226,12 +244,17 @@ namespace Junevy.EasyCamera.Common
             if (string.IsNullOrEmpty(cameraKey))
                 return CameraResult.Fail(-1, "Camera key is empty");
 
-            return this.cameraManager.Remove(cameraKey) switch
+            // 必须持 per-key 锁：否则 Close 会在 OpenCamera 的 Connect()、
+            // StartGrab/StopGrab 的厂商调用中途摘走并释放实例，形成 use-after-free 竞态
+            lock (this.GetKeyLock(cameraKey))
             {
-                CameraRemoveStatus.Removed => CameraResult.Success(0),
-                CameraRemoveStatus.NotFound => CameraResult.Fail(-1, ErrorMsg),
-                _ => CameraResult.Fail(-1, this.cameraManager.LastError ?? "Dispose camera error")
-            };
+                return this.cameraManager.Remove(cameraKey) switch
+                {
+                    CameraRemoveStatus.Removed => CameraResult.Success(0),
+                    CameraRemoveStatus.NotFound => CameraResult.Fail(-1, ErrorMsg),
+                    _ => CameraResult.Fail(-1, this.cameraManager.LastError ?? "Dispose camera error")
+                };
+            }
         }
 
         private static void DisposeCandidate(ICamera camera)
@@ -358,9 +381,12 @@ namespace Junevy.EasyCamera.Common
                 if (string.IsNullOrEmpty(triggerSource))
                     return CameraResult.Fail(-1, "Check the trigger source or trigger way");
 
-                camera.StopGrab();
+                var stopResult = camera.StopGrab();
+                if (!stopResult.IsSuccess)
+                    return stopResult;
+
                 if (camera.IsGrabbing)
-                    return CameraResult.Fail(-1, "Camera stop grabbing failed");
+                    return CameraResult.Fail(-1, camera.LastError ?? "Camera stop grabbing failed");
 
                 string acq = enableTrigger ? "On" : "Off";
                 var acqResult = camera.SetEnumParam("TriggerMode", acq);
@@ -409,5 +435,121 @@ namespace Junevy.EasyCamera.Common
         /// </returns>
         public string GetEnumParam(string cameraKey, string paramName)
             => this.TryGetEnumParam(cameraKey, paramName, out var value) ? value : string.Empty;
+
+        /// <summary>
+        /// 侵入式探测使用的临时 cameraKey 前缀；探测完成后连接即关闭，不留在注册表
+        /// </summary>
+        private const string ProbeKeyPrefix = "probe:";
+
+        /// <inheritdoc />
+        public bool IsSerialConnected(string serial)
+        {
+            if (string.IsNullOrEmpty(serial))
+                return false;
+
+            foreach (var entry in cameraManager.Snapshot())
+            {
+                try
+                {
+                    if (string.Equals(entry.Value.GetSerialNumber(), serial, StringComparison.Ordinal))
+                        return true;
+                }
+                catch
+                {
+                    // 单个实例取序列号失败不影响整体扫描
+                }
+            }
+
+            return false;
+        }
+
+        /// <inheritdoc />
+        public CameraLinkStatus ProbeCameraLinkStatus(ICameraInfo info, CancellationToken cancellationToken = default)
+        {
+            // 无序列号可匹配时无法判定任何链路状态：必须返回 Unknown 而不是谎称"被占用"
+            if (info == null || string.IsNullOrEmpty(info.SerialNumber))
+                return CameraLinkStatus.Unknown;
+
+            // 自持优先：本进程连接在独占模式下同样会令可达性检查失败，必须先查注册表
+            if (IsSerialConnected(info.SerialNumber))
+                return CameraLinkStatus.Connected;
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // 非侵入优先：厂商可达性查询（实现方自行重新枚举取新鲜设备信息）
+            var vendorStatus = TryProbeByVendor(info, cancellationToken);
+            if (vendorStatus.HasValue)
+                return vendorStatus.Value;
+
+            // 回退：侵入式探测（清理残留 → Open → 成功即 Idle 并立即 Close）
+            return ProbeByOpenClose(info, cancellationToken);
+        }
+
+        /// <summary>
+        /// 调用厂商非侵入探测：厂商未实现能力或调用失败（SDK 未初始化、设备枚举异常等）
+        /// 一律返回 <c>null</c>，由调用方回退到侵入式探测，绝不把异常抛给界面线程
+        /// </summary>
+        private CameraLinkStatus? TryProbeByVendor(ICameraInfo info, CancellationToken cancellationToken)
+        {
+            if (this.provider is not ILinkStatusProbeProvider probeProvider)
+                return null;
+
+            try
+            {
+                return probeProvider.ProbeLinkStatus(info, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 侵入式探测回退：以 probe:{serial} 为临时 key 尝试打开，
+        /// 成功说明当前可连接（Idle）并立即关闭；失败无法区分"被占用"与"设备不存在"，
+        /// 按"被占用"保守表达。
+        /// 探测用的帧流与相机连接都不留在注册表中。
+        /// </summary>
+        private CameraLinkStatus ProbeByOpenClose(ICameraInfo info, CancellationToken cancellationToken)
+        {
+            var probeKey = ProbeKeyPrefix + info.SerialNumber;
+
+            // 清理上次残留；NotFound 属正常路径
+            this.cameraManager.Remove(probeKey);
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                var opened = OpenCamera(info, probeKey);
+                if (!opened.IsSuccess)
+                    return CameraLinkStatus.Occupied;
+
+                Close(probeKey);
+                return CameraLinkStatus.Idle;
+            }
+            finally
+            {
+                // Close 失败/抛异常时也要清理：探测连接绝不能留在相机注册表或帧流表中
+                this.cameraManager.Remove(probeKey);
+                this.streamManager.RemoveStream(probeKey);
+            }
+        }
+
+        /// <inheritdoc />
+        public FrameStreamStatistics GetStreamStatistics(string cameraKey)
+        {
+            if (string.IsNullOrEmpty(cameraKey))
+                return FrameStreamStatistics.Empty;
+
+            if (!streamManager.GetStream(cameraKey, out var stream))
+                return FrameStreamStatistics.Empty;
+
+            return stream.Statistics;
+        }
     }
 }

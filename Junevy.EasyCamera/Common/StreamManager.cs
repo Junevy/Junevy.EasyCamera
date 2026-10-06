@@ -12,7 +12,20 @@ namespace Junevy.EasyCamera.Common
     public class StreamManager : IStreamManager
     {
         private readonly ConcurrentDictionary<string, ICameraStream> streams = new();
+        private readonly IStreamOptions options;
         private int disposed;
+
+        /// <summary>
+        /// 构造帧流管理器
+        /// </summary>
+        /// <param name="options">
+        /// 帧流配置（容量、背压策略）；为 <c>null</c> 时使用默认配置。
+        /// 依赖抽象而非具体 <see cref="StreamOptions" />，便于容器注入与测试替换
+        /// </param>
+        public StreamManager(IStreamOptions options = null)
+        {
+            this.options = options ?? new StreamOptions();
+        }
 
         /// <summary>
         /// 释放所有图像数据流
@@ -50,7 +63,7 @@ namespace Junevy.EasyCamera.Common
             if (string.IsNullOrEmpty(cameraKey))
                 throw new ArgumentNullException(nameof(cameraKey));
 
-            var stream = streams.GetOrAdd(cameraKey, _ => new CameraStream(cameraKey));
+            var stream = streams.GetOrAdd(cameraKey, _ => new CameraStream(cameraKey, this.options));
 
             // 与 Dispose 竞态时，字典外的新建流必须就地释放，避免无人持有的流常驻
             if (Volatile.Read(ref this.disposed) == 1)

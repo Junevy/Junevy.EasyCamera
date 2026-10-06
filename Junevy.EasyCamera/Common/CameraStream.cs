@@ -1,4 +1,5 @@
 using Junevy.EasyCamera.Core.Abstractions;
+using Junevy.EasyCamera.Core.Common;
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
@@ -13,16 +14,32 @@ namespace Junevy.EasyCamera.Common
     /// 每次成功发布都会把发布方的初始引用转移给流；流为每个成功入队的
     /// 订阅者增加一个引用，并在消费、淘汰或取消时恰好释放该引用。
     /// </summary>
+    /// <remarks>
+    /// 锁纪律：<see cref="operationLock" /> 只保护订阅者注册表，绝不在锁内做帧级重活
+    /// （引用计数、通道写入、背压淘汰、5MB 帧释放、用户异常回调）。
+    /// 这样订阅/退订不会被慢速释放阻塞，发布线程也不会被订阅管理阻塞。
+    /// </remarks>
     public class CameraStream : ICameraStream
     {
         private readonly ConcurrentDictionary<string, CameraStreamSubscriber> subscribers = new();
         private readonly string cameraKey;
+        private readonly IStreamOptions options;
         private readonly object operationLock = new();
         private int disposed;
 
-        public CameraStream(string cameraKey)
+        private long published;
+        private long delivered;
+        private long dropped;
+
+        /// <summary>
+        /// 构造相机帧数据流
+        /// </summary>
+        /// <param name="cameraKey">相机Key，随帧传给订阅 handler</param>
+        /// <param name="options">帧流配置（背压策略）；为 <c>null</c> 时使用默认配置</param>
+        public CameraStream(string cameraKey, IStreamOptions options = null)
         {
             this.cameraKey = cameraKey ?? throw new ArgumentNullException(nameof(cameraKey));
+            this.options = options ?? new StreamOptions();
         }
 
         /// <summary>
@@ -36,6 +53,12 @@ namespace Junevy.EasyCamera.Common
                     return this.subscribers.Count;
             }
         }
+
+        /// <inheritdoc />
+        public FrameStreamStatistics Statistics => new (
+            Interlocked.Read(ref this.published),
+            Interlocked.Read(ref this.delivered),
+            Interlocked.Read(ref this.dropped));
 
         public void Subscribe(
             string subscriberKey,
@@ -58,19 +81,21 @@ namespace Junevy.EasyCamera.Common
                     throw new ObjectDisposedException(nameof(CameraStream));
             }
 
+            // 背压策略在此一次性映射为通道行为：三种模式都不阻塞采集线程，区别只在丢哪一帧
             var channel = Channel.CreateBounded<IFrame>(
                 new BoundedChannelOptions(capacity)
                 {
-                    FullMode = BoundedChannelFullMode.DropOldest,
+                    FullMode = ToFullMode(this.options.BackpressureMode),
                     SingleReader = true,
                     SingleWriter = false,
                     AllowSynchronousContinuations = false
                 },
-                frame => DisposeFrame(frame, whenException));
+                // 背压淘汰的帧由流释放其引用；RejectNewest 模式下不会触发该回调
+                frame => this.OnFrameDropped(frame, whenException));
             var cts = new CancellationTokenSource();
 
             // 先构造订阅者并启动 worker（实例经参数传入，无闭包时序依赖），再进入注册竞争
-            var candidate = new CameraStreamSubscriber(subscriberKey, channel, cts);
+            var candidate = new CameraStreamSubscriber(channel, cts);
             candidate.StartWorker(self => this.ConsumeAsync(subscriberKey, self, channel, cts, handler, whenException));
 
             CameraStreamSubscriber replaced = null;
@@ -104,36 +129,56 @@ namespace Junevy.EasyCamera.Common
             if (frame == null)
                 return;
 
+            Interlocked.Increment(ref this.published);
+
             CameraStreamSubscriber[] snapshot;
             lock (this.operationLock)
             {
                 if (this.disposed == 1 || this.subscribers.Count == 0)
                 {
-                    DisposeFrame(frame, null);
-                    return;
+                    snapshot = null;
                 }
-
-                // 在锁内完成快照和 TryWrite，避免 Unsubscribe 在引用增加后提前 Dispose
-                // 同一个 subscriber。TryWrite 始终是非阻塞操作。
-                snapshot = this.subscribers.Values.ToArray();
-                foreach (var subscriber in snapshot)
+                else
                 {
-                    var addRefSucceeded = false;
-                    try
+                    // 只在锁内取快照：AddRef/TryWrite 与帧释放在锁外执行，
+                    // 订阅者在锁外被释放时 TryWrite 返回 false，引用照常归还，不会泄漏
+                    snapshot = this.subscribers.Values.ToArray();
+                }
+            }
+
+            if (snapshot == null || snapshot.Length == 0)
+            {
+                Interlocked.Increment(ref this.dropped);
+                DisposeFrame(frame, null);
+                return;
+            }
+
+            foreach (var subscriber in snapshot)
+            {
+                var addRefSucceeded = false;
+                try
+                {
+                    frame.AddRef();
+                    addRefSucceeded = true;
+
+                    if (!subscriber.TryWrite(frame))
                     {
-                        frame.AddRef();
-                        addRefSucceeded = true;
-                        if (!subscriber.TryWrite(frame))
-                            DisposeFrame(frame, null);
+                        // 通道已关闭或按 RejectNewest 拒绝：归还刚取得的引用
+                        Interlocked.Increment(ref this.dropped);
+                        DisposeFrame(frame, null);
                     }
-                    catch (Exception ex)
+                }
+                catch (Exception ex)
+                {
+                    if (addRefSucceeded)
                     {
-                        if (addRefSucceeded)
-                            DisposeFrame(frame, null);
-                        // 发布线程不应被订阅者的引用实现拖垮；异常只通过订阅者
-                        // 自己的回调报告（若有），并继续处理其他订阅者。
-                        _ = ex;
+                        Interlocked.Increment(ref this.dropped);
+                        DisposeFrame(frame, null);
                     }
+
+                    // 发布线程不应被订阅者的引用实现拖垮；异常只通过订阅者
+                    // 自己的回调报告（若有），并继续处理其他订阅者。
+                    _ = ex;
                 }
             }
 
@@ -173,6 +218,25 @@ namespace Junevy.EasyCamera.Common
                 subscriber.Dispose();
         }
 
+        /// <summary>
+        /// 背压策略 → 通道满时的行为。
+        /// <see cref="BackpressureMode.RejectNewest" /> 映射为 Wait：
+        /// <c>TryWrite</c> 在队列满时直接返回 false（不阻塞、不覆盖、不触发淘汰回调），
+        /// 由发布方计入丢帧统计。默认 DropOldest：淘汰最旧帧、保留最新画面。
+        /// </summary>
+        private static BoundedChannelFullMode ToFullMode(BackpressureMode mode)
+        {
+            return mode == BackpressureMode.RejectNewest
+                ? BoundedChannelFullMode.Wait
+                : BoundedChannelFullMode.DropOldest;
+        }
+
+        private void OnFrameDropped(IFrame frame, Action<Exception> whenException)
+        {
+            Interlocked.Increment(ref this.dropped);
+            DisposeFrame(frame, whenException);
+        }
+
         private async Task ConsumeAsync(
             string subscriberKey,
             CameraStreamSubscriber self,
@@ -193,6 +257,7 @@ namespace Junevy.EasyCamera.Common
                     {
                         try
                         {
+                            Interlocked.Increment(ref this.delivered);
                             await handler(this.cameraKey, frame).ConfigureAwait(false);
                         }
                         catch (Exception ex)
@@ -212,6 +277,11 @@ namespace Junevy.EasyCamera.Common
             catch (OperationCanceledException)
             {
                 // Dispose/Unsubscribe 会取消 worker；finally 仍会排空并释放剩余帧。
+            }
+            catch (ObjectDisposedException)
+            {
+                // CTS 在 worker 结束后才释放，理论上不可达；兜底避免异常终止路径丢帧
+                terminated = true;
             }
             catch (Exception ex)
             {

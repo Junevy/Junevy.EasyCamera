@@ -31,6 +31,11 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         private int disposed;
 
         /// <summary>
+        /// 引用计数保护锁：串行化 AddRef 与最后一次 Dispose
+        /// </summary>
+        private readonly object refLock = new();
+
+        /// <summary>
         /// 图像数据数组，托管内存
         /// </summary>
         public byte[] Data { get; }
@@ -78,9 +83,19 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         public ulong ImageSize => this.native.frameInfo.size;
 
         /// <summary>
-        /// 增加引用计数，防止图像帧被GC回收
+        /// 增加引用计数。已释放的帧不能重新取得引用，避免下游继续使用已终结的帧对象。
+        /// 注意：AddRef 应在持有帧的回调（如订阅 handler）返回前完成引用转移。
         /// </summary>
-        public void AddRef() => Interlocked.Increment(ref this.refCount);
+        public void AddRef()
+        {
+            lock (this.refLock)
+            {
+                if (Volatile.Read(ref this.disposed) == 1 || this.refCount <= 0)
+                    throw new ObjectDisposedException(nameof(IRaypleFrameWrapper));
+
+                this.refCount++;
+            }
+        }
 
         /// <summary>
         /// 释放图像帧。
@@ -88,10 +103,21 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// </summary>
         public void Dispose()
         {
-            if (Interlocked.Decrement(ref this.refCount) > 0)
-                return;
+            lock (this.refLock)
+            {
+                this.refCount--;
+                if (this.refCount > 0)
+                    return;
 
-            Interlocked.Exchange(ref this.disposed, 1);
+                // Dispose 保持幂等：重复释放不把引用计数压到负数
+                if (this.refCount < 0)
+                {
+                    this.refCount++;
+                    return;
+                }
+
+                Interlocked.Exchange(ref this.disposed, 1);
+            }
         }
 
         /// <summary>

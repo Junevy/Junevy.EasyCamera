@@ -1,27 +1,29 @@
 using Junevy.EasyCamera.Core.Abstractions;
+using Junevy.EasyCamera.Core.Common;
 using Junevy.EasyCamera.Common;
 using MvCameraControl;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace Junevy.EasyCamera.Vendors.HikVision
 {
     /// <summary>
     /// 海康工业相机提供器
     /// </summary>
-    public class HikCameraProvider : IVendorCameraProvider
+    public class HikCameraProvider : IVendorCameraProvider, ILinkStatusProbeProvider
     {
         /// <summary>
-        /// 相机帧数据流配置
+        /// 海康工业相机提供器
         /// </summary>
-        private readonly StreamOptions streamOptions;
+        private readonly IStreamOptions streamOptions;
 
         /// <summary>
         /// 构造海康工业相机提供器
         /// </summary>
         /// <param name="streamOptions">相机帧数据流配置，为 <c>null</c> 时使用默认配置</param>
-        public HikCameraProvider(StreamOptions streamOptions = null)
+        public HikCameraProvider(IStreamOptions streamOptions = null)
         {
             this.streamOptions = streamOptions ?? new StreamOptions();
         }
@@ -60,8 +62,9 @@ namespace Junevy.EasyCamera.Vendors.HikVision
 
             var camera = new HikCamera(hikInfo.Native, stream);
 
-            if (this.streamOptions.CameraBufferCapacity > 0)
-                camera.SetBufferCount(this.streamOptions.CameraBufferCapacity);
+            // 缓冲区配置是可选能力：厂商不支持时静默忽略，不影响相机可用性
+            if (this.streamOptions.CameraBufferCapacity > 0 && camera is IBufferConfigurable configurable)
+                configurable.SetBufferCount(this.streamOptions.CameraBufferCapacity);
 
             return camera;
         }
@@ -144,6 +147,48 @@ namespace Junevy.EasyCamera.Vendors.HikVision
                 CameraInterfaceType.Unknown => (DeviceTLayerType)0,
                 _ => (DeviceTLayerType)0,
             };
+        }
+
+        /// <summary>
+        /// 探测指定相机的链路状态：按接口类型缩小枚举范围后重新枚举取新鲜设备信息，
+        /// 再调用海康可达性查询。不信任调用方传入的原生引用（可能过期）；
+        /// 查询使用独占模式，与 HikCamera 无参 Open 的默认权限一致，"可达"≈"可连接"。
+        /// </summary>
+        /// <param name="info">相机信息，至少需提供序列号</param>
+        /// <param name="cancellationToken">取消令牌；枚举步骤间检查</param>
+        /// <returns>
+        /// 可达 → <see cref="CameraLinkStatus.Idle"/>；在线但不可达 → <see cref="CameraLinkStatus.Occupied"/>；
+        /// 枚举中不存在（掉线/未上电）→ <see cref="CameraLinkStatus.Unreachable"/>
+        /// </returns>
+        public CameraLinkStatus ProbeLinkStatus(ICameraInfo info, CancellationToken cancellationToken = default)
+        {
+            if (info == null || string.IsNullOrEmpty(info.SerialNumber))
+                return CameraLinkStatus.Unknown;
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // 接口类型未知时只能全量枚举；已知类型可显著缩小单次探测成本
+            var scope = info.InterfaceType == CameraInterfaceType.Unknown
+                ? CameraInterfaceType.All
+                : info.InterfaceType;
+
+            HikCameraInfo fresh = null;
+            foreach (var candidate in this.Enumerate(scope))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (candidate is HikCameraInfo hik
+                    && string.Equals(hik.SerialNumber, info.SerialNumber, StringComparison.Ordinal))
+                {
+                    fresh = hik;
+                    break;
+                }
+            }
+
+            if (fresh == null)
+                return CameraLinkStatus.Unreachable;
+
+            var accessible = DeviceEnumerator.IsDeviceAccessible(fresh.Native, DeviceAccessMode.AccessExclusive);
+            return accessible ? CameraLinkStatus.Idle : CameraLinkStatus.Occupied;
         }
     }
 }

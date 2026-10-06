@@ -17,5 +17,10 @@ namespace Junevy.EasyCamera.Common
         /// 仅部分厂商SDK支持配置；0表示使用SDK默认值
         /// </summary>
         public int CameraBufferCapacity { get; set; }
+
+        /// <summary>
+        /// 订阅者队列满时的背压策略，默认 <see cref="Core.Common.BackpressureMode.DropOldest" />
+        /// </summary>
+        public BackpressureMode BackpressureMode { get; set; } = BackpressureMode.DropOldest;
     }
 }

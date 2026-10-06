@@ -2,6 +2,7 @@ using Junevy.EasyCamera.Core.Abstractions;
 using Junevy.EasyCamera.Core.Common;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace Junevy.EasyCamera.Common
@@ -57,6 +58,18 @@ namespace Junevy.EasyCamera.Common
                     return false;
 
                 return this.cameras.TryGetValue(cameraKey, out camera);
+            }
+        }
+
+        /// <inheritdoc />
+        public IEnumerable<KeyValuePair<string, ICamera>> Snapshot()
+        {
+            lock (this.operationLock)
+            {
+                if (this.disposed)
+                    return System.Array.Empty<KeyValuePair<string, ICamera>>();
+
+                return this.cameras.ToArray();
             }
         }
 

@@ -5,6 +5,12 @@ namespace Junevy.EasyCamera.Core.Abstractions
     /// <summary>
     /// Camera提供器接口，负责枚举设备并创建相机实例。
     /// </summary>
+    /// <remarks>
+    /// 该接口只保留"所有厂商都必须能做的事"。厂商独有能力（可达性探测、内部缓冲区配置、
+    /// 设备命名等）一律通过独立的能力接口表达（如 <see cref="ILinkStatusProbeProvider" />、
+    /// <see cref="IBufferConfigurable" />、<see cref="INamedCameraInfo" />），
+    /// 避免每加一个能力就破坏所有实现者。
+    /// </remarks>
     public interface ICameraProvider
     {
         /// <summary>

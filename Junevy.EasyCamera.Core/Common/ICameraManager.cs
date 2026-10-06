@@ -1,5 +1,6 @@
 using Junevy.EasyCamera.Core.Abstractions;
 using System;
+using System.Collections.Generic;
 
 namespace Junevy.EasyCamera.Core.Common
 {
@@ -45,5 +46,12 @@ namespace Junevy.EasyCamera.Core.Common
         /// 最近一次清理失败的诊断信息；无失败时为 <c>null</c>，成功清理后清空
         /// </summary>
         string LastError { get; }
+
+        /// <summary>
+        /// 已注册相机实例的只读快照（键与实例），用于按序列号等非键维度扫描。
+        /// 返回调用时刻的快照，不反映之后的注册变化。
+        /// </summary>
+        /// <returns>键与相机实例对的只读序列；管理器已释放时为空</returns>
+        IEnumerable<KeyValuePair<string, ICamera>> Snapshot();
     }
 }

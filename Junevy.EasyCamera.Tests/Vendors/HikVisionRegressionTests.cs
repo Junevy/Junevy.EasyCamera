@@ -179,6 +179,8 @@ namespace Junevy.EasyCamera.Tests.Vendors.HikVision
         {
             public int SubscriberCount => 0;
 
+            public FrameStreamStatistics Statistics => FrameStreamStatistics.Empty;
+
             public void Dispose()
             {
             }

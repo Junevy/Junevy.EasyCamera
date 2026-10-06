@@ -6,6 +6,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Junevy.EasyCamera.Tests.Common
@@ -149,6 +150,63 @@ namespace Junevy.EasyCamera.Tests.Common
             Assert.AreEqual(42, value);
         }
 
+        [TestMethod]
+        public async Task CameraService_Close_WaitsForInFlightOpenOnSameKey()
+        {
+            // Close 必须与 OpenCamera 走同一把 per-key 锁：
+            // 否则 Close 会在 Connect() 中途把实例摘走并释放，随后对已释放实例 Connect/StartGrab
+            var provider = new TrackingProvider();
+            var manager = new CameraManager();
+            using var streams = new StreamManager();
+            var service = new CameraService(provider, manager, streams);
+            var info = new MockCameraInfo { SerialNumber = "SN001" };
+
+            provider.ConnectGate = new SemaphoreSlim(0, 1);
+
+            var openTask = Task.Run(() => service.OpenCamera(info, "key"));
+            await provider.ConnectEntered.Task;
+
+            var closeTask = Task.Run(() => service.Close("key"));
+            await Task.Delay(150);
+
+            Assert.IsFalse(closeTask.IsCompleted, "同 key 的 Close 必须等待进行中的 OpenCamera");
+
+            provider.ConnectGate.Release();
+            await openTask;
+
+            Assert.IsTrue(closeTask.Wait(TimeSpan.FromSeconds(5)));
+            Assert.IsTrue(closeTask.Result.IsSuccess);
+            Assert.IsFalse(manager.TryGet("key", out _), "关闭后注册表必须为空");
+        }
+
+        [TestMethod]
+        public async Task CameraService_StartGrab_WaitsForInFlightCloseOnSameKey()
+        {
+            var provider = new TrackingProvider();
+            var manager = new CameraManager();
+            using var streams = new StreamManager();
+            var service = new CameraService(provider, manager, streams);
+            var info = new MockCameraInfo { SerialNumber = "SN001" };
+
+            // 阻塞门必须在 OpenCamera 之前挂上：相机实例是创建时从提供器取走这些设置的
+            provider.CloseGate = new SemaphoreSlim(0, 1);
+
+            Assert.IsTrue(service.OpenCamera(info, "key").IsSuccess);
+
+            var closeTask = Task.Run(() => service.Close("key"));
+            await provider.CloseEntered.Task;
+
+            var startTask = Task.Run(() => service.StartGrab("key"));
+            await Task.Delay(150);
+            Assert.IsFalse(startTask.IsCompleted, "同 key 的 StartGrab 必须等待进行中的 Close");
+
+            provider.CloseGate.Release();
+            await closeTask;
+            await startTask;
+
+            Assert.IsFalse(startTask.Result.IsSuccess, "相机已关闭后 StartGrab 必须失败而不是拿到已释放实例");
+        }
+
         private sealed class DisposingStreamManager : IStreamManager
         {
             public ICameraStream GetOrCreateStream(string userDefinedName) => throw new ObjectDisposedException(nameof(StreamManager));
@@ -169,6 +227,8 @@ namespace Junevy.EasyCamera.Tests.Common
         private sealed class DisposedCameraStream : ICameraStream
         {
             public int SubscriberCount => 0;
+
+            public FrameStreamStatistics Statistics => FrameStreamStatistics.Empty;
 
             public void Dispose()
             {
@@ -274,6 +334,16 @@ namespace Junevy.EasyCamera.Tests.Common
             public bool TryGetParamResult { get; set; } = true;
             public int TryGetParamValue { get; set; } = 42;
 
+            /// <summary>非空时 Connect 会在此阻塞，用于制造"打开进行中"的窗口</summary>
+            public SemaphoreSlim ConnectGate { get; set; }
+
+            /// <summary>非空时 Close 会在此阻塞，用于制造"关闭进行中"的窗口</summary>
+            public SemaphoreSlim CloseGate { get; set; }
+
+            public TaskCompletionSource<object> ConnectEntered { get; } = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public TaskCompletionSource<object> CloseEntered { get; } = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+
             public bool Supports(ICameraInfo info) => true;
 
             public ICamera Create(ICameraInfo info, ICameraStream stream)
@@ -283,7 +353,11 @@ namespace Junevy.EasyCamera.Tests.Common
                     ConnectResult = this.ConnectResult,
                     CloseResult = this.CloseResult,
                     TryGetParamResult = this.TryGetParamResult,
-                    TryGetParamValue = this.TryGetParamValue
+                    TryGetParamValue = this.TryGetParamValue,
+                    ConnectGate = this.ConnectGate,
+                    ConnectEntered = this.ConnectEntered,
+                    CloseGate = this.CloseGate,
+                    CloseEntered = this.CloseEntered
                 };
                 this.CreatedCameras.Add(camera);
                 return camera;
@@ -298,14 +372,24 @@ namespace Junevy.EasyCamera.Tests.Common
         {
             public CameraResult ConnectResult { get; set; } = CameraResult.Success(0);
             public CameraResult CloseResult { get; set; } = CameraResult.Success(0);
+            public CameraResult StopGrabResult { get; set; } = CameraResult.Success(0);
             public bool TryGetParamResult { get; set; } = true;
             public int TryGetParamValue { get; set; } = 42;
             public bool IsConnected { get; private set; }
             public bool IsGrabbing { get; private set; }
             public bool IsDisposed { get; private set; }
+            public string LastError { get; set; }
+
+            public SemaphoreSlim ConnectGate { get; set; }
+            public TaskCompletionSource<object> ConnectEntered { get; set; }
+            public SemaphoreSlim CloseGate { get; set; }
+            public TaskCompletionSource<object> CloseEntered { get; set; }
 
             public CameraResult Connect()
             {
+                this.ConnectEntered?.TrySetResult(null);
+                this.ConnectGate?.Wait();
+
                 if (this.ConnectResult.IsSuccess)
                     this.IsConnected = true;
                 return this.ConnectResult;
@@ -313,6 +397,9 @@ namespace Junevy.EasyCamera.Tests.Common
 
             public CameraResult Close()
             {
+                this.CloseEntered?.TrySetResult(null);
+                this.CloseGate?.Wait();
+
                 if (this.CloseResult.IsSuccess)
                     this.IsConnected = false;
                 return this.CloseResult;
@@ -327,7 +414,12 @@ namespace Junevy.EasyCamera.Tests.Common
                 return CameraResult.Success(0);
             }
 
-            public void StopGrab() => this.IsGrabbing = false;
+            public CameraResult StopGrab()
+            {
+                if (this.StopGrabResult.IsSuccess)
+                    this.IsGrabbing = false;
+                return this.StopGrabResult;
+            }
             public CameraResult SetParam(string paramName, int value) => CameraResult.Success(0);
             public CameraResult SetParam(string paramName, float value) => CameraResult.Success(0);
             public CameraResult SetParam(string paramName, bool value) => CameraResult.Success(0);

@@ -8,7 +8,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
     /// Irayple工业相机设备信息
     /// </summary>
     [Obsolete("未开发完毕", true)]
-    public class IRaypleCameraInfo : ICameraInfo
+    public class IRaypleCameraInfo : ICameraInfo, INamedCameraInfo
     {
         /// <summary>
         /// 相机序列号
@@ -83,12 +83,9 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// <returns>
         /// 是否设置成功
         /// </returns>
-        public bool SetDefinedName(string name)
+        bool INamedCameraInfo.SetDefinedName(string name)
         {
-            if (string.IsNullOrEmpty(name))
-                return false;
-
-            if (name.Length > 64)
+            if (string.IsNullOrEmpty(name) || name.Length > 64)
                 return false;
 
             this.UserDefinedName = name;

@@ -1,4 +1,5 @@
 using Junevy.EasyCamera.Core.Abstractions;
+using Junevy.EasyCamera.Core.Common;
 using Junevy.EasyCamera.Common;
 using MVSDK_Net;
 using System;
@@ -15,15 +16,15 @@ namespace Junevy.EasyCamera.Vendors.IRayple
     public class IRaypleCameraProvider : IVendorCameraProvider
     {
         /// <summary>
-        /// 相机帧数据流配置
+        /// Irayple工业相机提供器
         /// </summary>
-        private readonly StreamOptions streamOptions;
+        private readonly IStreamOptions streamOptions;
 
         /// <summary>
         /// 构造Irayple工业相机提供器
         /// </summary>
         /// <param name="streamOptions">相机帧数据流配置，为 <c>null</c> 时使用默认配置</param>
-        public IRaypleCameraProvider(StreamOptions streamOptions = null)
+        public IRaypleCameraProvider(IStreamOptions streamOptions = null)
         {
             this.streamOptions = streamOptions ?? new StreamOptions();
         }
@@ -62,8 +63,8 @@ namespace Junevy.EasyCamera.Vendors.IRayple
 
             var camera = new IRaypleCamera(iraypleInfo.Native, stream);
 
-            if (this.streamOptions.CameraBufferCapacity > 0)
-                camera.SetBufferCount(this.streamOptions.CameraBufferCapacity);
+            if (this.streamOptions.CameraBufferCapacity > 0 && camera is IBufferConfigurable configurable)
+                configurable.SetBufferCount(this.streamOptions.CameraBufferCapacity);
 
             return camera;
         }

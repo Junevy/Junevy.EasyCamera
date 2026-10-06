@@ -11,32 +11,24 @@ namespace Junevy.EasyCamera.Common
     /// 工作线程由 <see cref="StartWorker" /> 在构造后立即启动，
     /// 实例引用以参数形式传入工厂，消除"闭包读取尚未赋值的局部变量"的时序依赖。
     /// </summary>
-    public sealed class CameraStreamSubscriber
+    /// <remarks>
+    /// 实现细节，不属于对外契约：帧分发方（<see cref="CameraStream" />）使用显式内部可见性访问。
+    /// </remarks>
+    internal sealed class CameraStreamSubscriber
     {
         private int disposed;
         private int ctsDisposed;
         private Task worker;
 
-        public CameraStreamSubscriber(string key, Channel<IFrame> channel, CancellationTokenSource cts)
+        public CameraStreamSubscriber(Channel<IFrame> channel, CancellationTokenSource cts)
         {
-            this.Key = key ?? throw new ArgumentNullException(nameof(key));
             this.Channel = channel ?? throw new ArgumentNullException(nameof(channel));
             this.Cts = cts ?? throw new ArgumentNullException(nameof(cts));
         }
 
-        /// <summary>
-        /// 订阅者标识，与注册到流的 Key 一致
-        /// </summary>
-        public string Key { get; }
+        internal Channel<IFrame> Channel { get; }
 
-        public Channel<IFrame> Channel { get; }
-
-        public CancellationTokenSource Cts { get; }
-
-        /// <summary>
-        /// 消费工作线程任务，由 <see cref="StartWorker" /> 启动后可用
-        /// </summary>
-        public Task Worker => this.worker;
+        internal CancellationTokenSource Cts { get; }
 
         /// <summary>
         /// 启动消费工作线程。须在构造后立即调用恰好一次；

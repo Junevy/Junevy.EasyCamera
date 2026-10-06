@@ -9,6 +9,9 @@
     <!-- 厂商 SDK 为 AMD64 专用，测试宿主必须 x64 -->
     <PlatformTarget>x64</PlatformTarget>
     <IsTestProject>true</IsTestProject>
+    <!-- CS0067：厂商 SDK 接口要求桩类型保留事件成员（StreamExceptionEvent），实现内不触发属预期 -->
+    <!-- SYSLIB0050：构造 SDK 的 FrameGrabbedEventArgs 只能走 FormatterServices.GetUninitializedObject -->
+    <NoWarn>NU1605;SYSLIB0011;SYSLIB0050;CS0067</NoWarn>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <!-- 确保 NuGet 包的运行时资产复制到输出目录（net8.0 testhost 依赖清单校验需要） -->
@@ -47,6 +50,7 @@
 
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Properties\PlatformCompatibility.cs" />
     <Compile Include="Abstractions\CameraResultTests.cs" />
     <Compile Include="Abstractions\CameraStreamTests.cs" />
     <Compile Include="Abstractions\CameraStreamRegressionTests.cs" />
@@ -54,6 +58,8 @@
     <Compile Include="Common\AggregateCameraProviderTests.cs" />
     <Compile Include="Common\CompositeCameraSdkSystemTests.cs" />
     <Compile Include="Common\CameraManagerServiceRegressionTests.cs" />
+    <Compile Include="Common\CameraServiceProbeTests.cs" />
+    <Compile Include="Common\CameraStreamBackpressureTests.cs" />
     <Compile Include="Common\StreamManagerTests.cs" />
     <Compile Include="Common\EasyCameraBuilderTests.cs" />
     <Compile Include="Extensions\ServiceCollectionExtensionsTests.cs" />
@@ -64,6 +70,7 @@
     <Compile Include="Mocks\MockCameraProvider.cs" />
     <Compile Include="Mocks\MockFrame.cs" />
     <Compile Include="Vendors\HikVisionRegressionTests.cs" />
+    <Compile Include="Vendors\HikCameraStateTests.cs" />
     <Compile Include="Vendors\HikCameraSdkSystemTests.cs" />
   </ItemGroup>
 

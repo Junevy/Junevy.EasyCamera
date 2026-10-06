@@ -6,40 +6,31 @@ namespace Junevy.EasyCamera.Vendors.IRayple
 {
     /// <summary>
     /// Irayple相机SDK系统。
-    /// Irayple SDK 未提供全局初始化/反初始化接口，此处仅维护幂等的初始化状态标记
+    /// Irayple SDK 未提供全局初始化/反初始化接口，因此 Initialize/Release 为空操作：
+    /// 保留它们是为了让多厂商组合（CompositeCameraSdkSystem）对所有厂商使用同一条生命周期路径。
     /// </summary>
 
     [Obsolete("未开发完毕", true)]
     public class IRaypleCameraSdkSystem : ICameraSdkSystem
     {
         /// <summary>
-        /// 相机SDK系统是否已初始化
-        /// </summary>
-        private int isInitialized;
-
-        /// <summary>
         /// 是否已释放
         /// </summary>
         private int disposed;
 
         /// <summary>
-        /// 初始化相机SDK（幂等，可重复调用）
+        /// 初始化相机SDK（幂等，可重复调用）。Irayple SDK 无需全局初始化，空操作。
         /// </summary>
         public void Initialize()
         {
             // 已释放的SDK系统不再允许重新初始化
-            if (Volatile.Read(ref this.disposed) == 1)
-                return;
-
-            Interlocked.Exchange(ref this.isInitialized, 1);
         }
 
         /// <summary>
-        /// 释放相机SDK资源（幂等，可重复调用）
+        /// 释放相机SDK资源（幂等，可重复调用）。Irayple SDK 无需全局反初始化，空操作。
         /// </summary>
         public void Release()
         {
-            Interlocked.Exchange(ref this.isInitialized, 0);
         }
 
         /// <summary>
@@ -47,10 +38,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// </summary>
         public void Dispose()
         {
-            if (Interlocked.CompareExchange(ref this.disposed, 1, 0) == 1)
-                return;
-
-            this.Release();
+            Interlocked.Exchange(ref this.disposed, 1);
         }
     }
 }

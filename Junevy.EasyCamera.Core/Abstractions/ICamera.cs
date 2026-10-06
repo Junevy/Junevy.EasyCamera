@@ -24,6 +24,12 @@ namespace Junevy.EasyCamera.Core.Abstractions
         bool IsGrabbing { get; }
 
         /// <summary>
+        /// 最近一次无法通过返回值表达的生命周期错误的诊断信息（例如停止取流失败）。
+        /// 无失败时为 <c>null</c>；成功完成后清空，避免陈旧错误误导诊断。
+        /// </summary>
+        string LastError { get; }
+
+        /// <summary>
         /// 打开Camera
         /// </summary>
         /// <returns>
@@ -48,9 +54,12 @@ namespace Junevy.EasyCamera.Core.Abstractions
         CameraResult StartGrab();
 
         /// <summary>
-        /// 停止取流
+        /// 停止取流（幂等，可重复调用；未在取流时返回成功）
         /// </summary>
-        void StopGrab();
+        /// <returns>
+        /// <see cref="CameraResult" />
+        /// </returns>
+        CameraResult StopGrab();
 
         /// <summary>
         /// 获取相机序列号

@@ -91,7 +91,9 @@ namespace Junevy.EasyCamera
 
             var sdk = sdkSystems.Count == 1 ? sdkSystems[0] : new CompositeCameraSdkSystem(sdkSystems);
             var cameraManager = new CameraManager();
-            var streamManager = new StreamManager();
+
+            // 帧流管理器必须拿到同一份配置，否则背压策略/容量不会生效
+            var streamManager = new StreamManager(this.streamOptions);
             var service = new CameraService(
                 new AggregateCameraProvider(providers),
                 cameraManager,

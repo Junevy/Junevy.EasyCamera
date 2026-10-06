@@ -1,4 +1,5 @@
 using Junevy.EasyCamera.Core.Abstractions;
+using Junevy.EasyCamera.Core.Common;
 using MVSDK_Net;
 using System;
 using System.Threading;
@@ -7,10 +8,12 @@ using static MVSDK_Net.IMVDefine;
 namespace Junevy.EasyCamera.Vendors.IRayple
 {
     /// <summary>
-    /// Irayple工业相机
+    /// Irayple工业相机。
+    /// 尚未开发完毕（类型标记 <see cref="ObsoleteAttribute" />），启用即抛未实现异常；
+    /// 此处按与海康一致的生命周期纪律维护：原生访问串行化、释放前排空在途回调。
     /// </summary>
     [Obsolete("未开发完毕", true)]
-    public class IRaypleCamera : ICamera
+    public class IRaypleCamera : ICamera, IParameterSource, IBufferConfigurable
     {
         /// <summary>
         /// Irayple原生设备信息
@@ -26,6 +29,11 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// 帧到达回调委托，构造时缓存以避免被GC回收
         /// </summary>
         private readonly IMV_FrameCallBack frameHandler;
+
+        /// <summary>
+        /// 串行化全部原生访问（打开/关闭/取流/参数/释放）
+        /// </summary>
+        private readonly SemaphoreSlim operationGate = new(1, 1);
 
         /// <summary>
         /// Irayple相机实例
@@ -53,6 +61,24 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         private int disposed;
 
         /// <summary>
+        /// 帧回调是否已绑定到原生句柄：同一句柄只绑定一次，避免重复回调导致重复发布
+        /// </summary>
+        private int callbackAttached;
+
+        /// <summary>
+        /// 已进入回调但尚未完成归还帧的数量
+        /// </summary>
+        private int inFlightCallbacks;
+
+        /// <summary>
+        /// 释放时等待在途回调排空的超时时间
+        /// </summary>
+        private static readonly TimeSpan CallbackDrainTimeout = TimeSpan.FromSeconds(5);
+
+        private readonly object stateLock = new();
+        private string lastError;
+
+        /// <summary>
         /// 是否已打开
         /// </summary>
         public bool IsConnected => Volatile.Read(ref this.isOpen) == 1 && (this.camera?.IMV_IsOpen() ?? false);
@@ -61,6 +87,24 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// 是否正在取流
         /// </summary>
         public bool IsGrabbing => Volatile.Read(ref this.isGrabbing) == 1 && (this.camera?.IMV_IsGrabbing() ?? false);
+
+        /// <summary>
+        /// 最近一次无法通过返回值表达的生命周期错误的诊断信息
+        /// </summary>
+        public string LastError
+        {
+            get
+            {
+                lock (this.stateLock)
+                    return this.lastError;
+            }
+        }
+
+        private void SetLastError(string message)
+        {
+            lock (this.stateLock)
+                this.lastError = message;
+        }
 
         /// <summary>
         /// 构造Irayple工业相机
@@ -85,50 +129,60 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// </returns>
         public CameraResult Connect()
         {
-            if (Volatile.Read(ref this.disposed) == 1)
-                return CameraResult.Fail(-1, "The camera has been disposed");
-
-            if (this.IsConnected)
-                return CameraResult.Fail(-1, "The camera has been opened");
-
+            this.operationGate.Wait();
             try
             {
-                if (this.camera == null)
+                if (Volatile.Read(ref this.disposed) == 1)
+                    return CameraResult.Fail(-1, "The camera has been disposed");
+
+                if (this.IsConnected)
+                    return CameraResult.Fail(-1, "The camera has been opened");
+
+                try
                 {
-                    this.camera = new MyCamera();
-
-                    var key = string.IsNullOrEmpty(this.cameraInfo.cameraKey)
-                        ? this.cameraInfo.serialNumber
-                        : this.cameraInfo.cameraKey;
-
-                    var createResult = this.camera.IMV_CreateHandle(IMV_ECreateHandleMode.modeByCameraKey, 0, key);
-
-                    if (createResult != IMV_OK)
+                    if (this.camera == null)
                     {
-                        // 句柄创建失败时必须立即销毁，避免残留半初始化的原生句柄
-                        this.ReleaseHandle();
-                        return CameraResult.Fail(createResult, "Create camera handle failed");
+                        this.camera = new MyCamera();
+
+                        var key = string.IsNullOrEmpty(this.cameraInfo.cameraKey)
+                            ? this.cameraInfo.serialNumber
+                            : this.cameraInfo.cameraKey;
+
+                        var createResult = this.camera.IMV_CreateHandle(IMV_ECreateHandleMode.modeByCameraKey, 0, key);
+
+                        if (createResult != IMV_OK)
+                        {
+                            // 句柄创建失败时必须立即销毁，避免残留半初始化的原生句柄
+                            this.ReleaseHandle();
+                            return CameraResult.Fail(createResult, "Create camera handle failed");
+                        }
                     }
+
+                    var openResult = this.camera.IMV_Open();
+
+                    if (openResult != IMV_OK)
+                        return CameraResult.Fail(openResult, "Open camera failed");
+
+                    // 设备打开成功即置位，避免后续可选配置失败时状态位与设备真实状态不一致
+                    Interlocked.Exchange(ref this.isOpen, 1);
+
+                    // 延迟应用缓冲区配置：必须在设备打开之后、开始取流之前。
+                    // 该配置为可选优化项，失败不影响相机可用性
+                    if (this.bufferCount > 0)
+                        this.TryApplyBufferCount();
+
+                    this.SetLastError(null);
+                    return CameraResult.Success(openResult);
                 }
-
-                var openResult = this.camera.IMV_Open();
-
-                if (openResult != IMV_OK)
-                    return CameraResult.Fail(openResult, "Open camera failed");
-
-                // 设备打开成功即置位，避免后续可选配置失败时状态位与设备真实状态不一致
-                Interlocked.Exchange(ref this.isOpen, 1);
-
-                // 延迟应用缓冲区配置：必须在设备打开之后、开始取流之前。
-                // 该配置为可选优化项，失败不影响相机可用性
-                if (this.bufferCount > 0)
-                    this.TryApplyBufferCount();
-
-                return CameraResult.Success(openResult);
+                catch (Exception e)
+                {
+                    this.SetLastError(e.Message);
+                    return CameraResult.Fail(-1, e.Message);
+                }
             }
-            catch (Exception e)
+            finally
             {
-                return CameraResult.Fail(-1, e.Message);
+                this.operationGate.Release();
             }
         }
 
@@ -140,30 +194,44 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// </returns>
         public CameraResult Close()
         {
-            if (this.camera == null)
-                return CameraResult.Fail(-1, "Camera not initialized");
-
-            this.StopGrab();
-
+            this.operationGate.Wait();
             try
             {
-                if (this.camera.IMV_IsOpen())
+                if (this.camera == null)
+                    return CameraResult.Fail(-1, "Camera not initialized");
+
+                Interlocked.Exchange(ref this.isGrabbing, 0);
+                var stopResult = StopGrabbingCore();
+                if (!stopResult.IsSuccess)
+                    return stopResult;
+
+                // 关闭句柄前必须排空在途回调，否则回调中的原生帧会失效
+                this.WaitForCallbacks();
+
+                try
                 {
-                    var result = this.camera.IMV_Close();
+                    if (this.camera.IMV_IsOpen())
+                    {
+                        var result = this.camera.IMV_Close();
+                        Interlocked.Exchange(ref this.isOpen, 0);
+
+                        if (result != IMV_OK)
+                            return CameraResult.Fail(result, "Close camera failed");
+
+                        return CameraResult.Success(result, "Camera closed");
+                    }
+
                     Interlocked.Exchange(ref this.isOpen, 0);
-
-                    if (result != IMV_OK)
-                        return CameraResult.Fail(result, "Close camera failed");
-
-                    return CameraResult.Success(result, "Camera closed");
+                    return CameraResult.Success(IMV_OK, "Camera closed");
                 }
-
-                Interlocked.Exchange(ref this.isOpen, 0);
-                return CameraResult.Success(IMV_OK, "Camera closed");
+                catch (Exception e)
+                {
+                    return CameraResult.Fail(-1, e.Message);
+                }
             }
-            catch (Exception e)
+            finally
             {
-                return CameraResult.Fail(-1, e.Message);
+                this.operationGate.Release();
             }
         }
 
@@ -175,50 +243,72 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// </returns>
         public CameraResult StartGrab()
         {
-            if (!this.IsConnected)
-                return CameraResult.Fail(-1, "Camera is not open");
-
-            // 由取流状态位保证并发调用只有一个线程能真正启动取流
-            if (Interlocked.CompareExchange(ref this.isGrabbing, 1, 0) == 1)
-                return CameraResult.Fail(-1, "Camera is already grabbing");
-
+            this.operationGate.Wait();
             try
             {
-                var attachResult = this.camera.IMV_AttachGrabbing(this.frameHandler, IntPtr.Zero);
+                if (!this.IsConnected)
+                    return CameraResult.Fail(-1, "Camera is not open");
 
-                if (attachResult != IMV_OK)
+                // 由取流状态位保证并发调用只有一个线程能真正启动取流
+                if (Interlocked.CompareExchange(ref this.isGrabbing, 1, 0) == 1)
+                    return CameraResult.Fail(-1, "Camera is already grabbing");
+
+                try
+                {
+                    // 同一原生句柄只绑定一次回调：重复绑定会让每帧被多次发布
+                    if (Interlocked.Exchange(ref this.callbackAttached, 1) == 0)
+                    {
+                        var attachResult = this.camera.IMV_AttachGrabbing(this.frameHandler, IntPtr.Zero);
+                        if (attachResult != IMV_OK)
+                        {
+                            Interlocked.Exchange(ref this.callbackAttached, 0);
+                            Interlocked.Exchange(ref this.isGrabbing, 0);
+                            return CameraResult.Fail(attachResult, "Attach grabbing failed");
+                        }
+                    }
+
+                    var startResult = this.camera.IMV_StartGrabbing();
+
+                    if (startResult != IMV_OK)
+                    {
+                        Interlocked.Exchange(ref this.isGrabbing, 0);
+                        return CameraResult.Fail(startResult, "Start grabbing failed");
+                    }
+
+                    this.SetLastError(null);
+                    return CameraResult.Success(startResult, "Start grabbing is successful");
+                }
+                catch (Exception e)
                 {
                     Interlocked.Exchange(ref this.isGrabbing, 0);
-                    return CameraResult.Fail(attachResult, "Attach grabbing failed");
+                    return CameraResult.Fail(-1, e.Message);
                 }
-
-                var startResult = this.camera.IMV_StartGrabbing();
-
-                if (startResult != IMV_OK)
-                {
-                    Interlocked.Exchange(ref this.isGrabbing, 0);
-                    return CameraResult.Fail(startResult, "Start grabbing failed");
-                }
-
-                return CameraResult.Success(startResult, "Start grabbing is successful");
             }
-            catch (Exception e)
+            finally
             {
-                Interlocked.Exchange(ref this.isGrabbing, 0);
-                return CameraResult.Fail(-1, e.Message);
+                this.operationGate.Release();
             }
         }
 
         /// <summary>
         /// 停止取流（幂等，可重复调用）
         /// </summary>
-        public void StopGrab()
+        /// <returns>相机操作结果；未在取流时返回成功</returns>
+        public CameraResult StopGrab()
         {
-            // 状态位由1翻转为0的线程负责真正停止取流
-            if (Interlocked.CompareExchange(ref this.isGrabbing, 0, 1) != 1)
-                return;
+            this.operationGate.Wait();
+            try
+            {
+                // 状态位由1翻转为0的线程负责真正停止取流
+                if (Interlocked.CompareExchange(ref this.isGrabbing, 0, 1) != 1)
+                    return CameraResult.Success(IMV_OK);
 
-            StopGrabbingCore();
+                return StopGrabbingCore();
+            }
+            finally
+            {
+                this.operationGate.Release();
+            }
         }
 
         /// <summary>
@@ -229,16 +319,17 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// <returns>
         /// 相机操作结果
         /// </returns>
-        public CameraResult SetBufferCount(int count)
+        CameraResult IBufferConfigurable.SetBufferCount(int count)
         {
             if (count < 1)
                 return CameraResult.Fail(-1, "The buffer count must be greater than zero");
 
             this.bufferCount = count;
 
-            if (this.camera == null || !this.IsConnected)
+            if (!this.IsConnected)
                 return CameraResult.Success(0);
 
+            this.operationGate.Wait();
             try
             {
                 var result = this.camera.IMV_SetBufferCount((uint)count);
@@ -247,6 +338,10 @@ namespace Junevy.EasyCamera.Vendors.IRayple
             catch (Exception e)
             {
                 return CameraResult.Fail(-1, e.Message);
+            }
+            finally
+            {
+                this.operationGate.Release();
             }
         }
 
@@ -373,95 +468,106 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// long → int 的受检转换：越界按"取值失败"处理，禁止静默回绕
         /// </summary>
         private static bool TryConvertToInt64ToInt32(long value, out int result)
-        {
-            if (value < int.MinValue || value > int.MaxValue)
-            {
-                result = 0;
-                return false;
-            }
+            => ParameterReader.TryConvertToInt64ToInt32(value, out result);
 
-            result = (int)value;
+        public bool TryGetParam<T>(string paramName, out T value)
+            => ParameterReader.TryRead<T>(this, paramName, out value);
+
+        #region 参数读取原语（IParameterSource 显式实现）
+
+        bool IParameterSource.TryReadInt(string paramName, out int value)
+        {
+            value = 0;
+
+            if (!this.IsConnected)
+                return false;
+
+            long longValue = 0;
+            if (this.camera.IMV_GetIntFeatureValue(paramName, ref longValue) != IMV_OK)
+                return false;
+
+            return TryConvertToInt64ToInt32(longValue, out value);
+        }
+
+        bool IParameterSource.TryReadLong(string paramName, out long value)
+        {
+            value = 0;
+
+            if (!this.IsConnected)
+                return false;
+
+            long longValue = 0;
+            if (this.camera.IMV_GetIntFeatureValue(paramName, ref longValue) != IMV_OK)
+                return false;
+
+            value = longValue;
             return true;
         }
 
-        public bool TryGetParam<T>(string paramName, out T value)
+        bool IParameterSource.TryReadFloat(string paramName, out float value)
         {
-            value = default;
-            if (!this.IsConnected || string.IsNullOrEmpty(paramName))
+            value = 0;
+
+            double doubleValue = 0;
+            if (!this.TryReadDoubleCore(paramName, out doubleValue))
                 return false;
 
-            try
-            {
-                var type = typeof(T);
-
-                if (type == typeof(int))
-                {
-                    long longValue = 0;
-                    if (this.camera.IMV_GetIntFeatureValue(paramName, ref longValue) == IMV_OK
-                        && TryConvertToInt64ToInt32(longValue, out var value32))
-                    {
-                        value = (T)(object)value32;
-                        return true;
-                    }
-
-                    return false;
-                }
-
-                if (type == typeof(long))
-                {
-                    long longValue = 0;
-                    if (this.camera.IMV_GetIntFeatureValue(paramName, ref longValue) == IMV_OK)
-                    {
-                        value = (T)(object)longValue;
-                        return true;
-                    }
-
-                    return false;
-                }
-
-                if (type == typeof(float) || type == typeof(double))
-                {
-                    double doubleValue = 0;
-                    if (this.camera.IMV_GetDoubleFeatureValue(paramName, ref doubleValue) == IMV_OK)
-                    {
-                        value = (T)(object)(type == typeof(float) ? (object)(float)doubleValue : (object)doubleValue);
-                        return true;
-                    }
-
-                    return false;
-                }
-
-                if (type == typeof(bool))
-                {
-                    var boolValue = false;
-                    if (this.camera.IMV_GetBoolFeatureValue(paramName, ref boolValue) == IMV_OK)
-                    {
-                        value = (T)(object)boolValue;
-                        return true;
-                    }
-
-                    return false;
-                }
-
-                if (type == typeof(string))
-                {
-                    var stringValue = new IMV_String { str = string.Empty };
-                    if (this.camera.IMV_GetStringFeatureValue(paramName, ref stringValue) == IMV_OK)
-                    {
-                        value = (T)(object)(stringValue.str ?? string.Empty);
-                        return true;
-                    }
-
-                    return false;
-                }
-
-                return false;
-            }
-            catch
-            {
-                return false;
-            }
+            value = (float)doubleValue;
+            return true;
         }
+
+        bool IParameterSource.TryReadDouble(string paramName, out double value)
+        {
+            value = 0;
+            return this.TryReadDoubleCore(paramName, out value);
+        }
+
+        bool IParameterSource.TryReadBool(string paramName, out bool value)
+        {
+            value = false;
+
+            if (!this.IsConnected)
+                return false;
+
+            var boolValue = false;
+            if (this.camera.IMV_GetBoolFeatureValue(paramName, ref boolValue) != IMV_OK)
+                return false;
+
+            value = boolValue;
+            return true;
+        }
+
+        bool IParameterSource.TryReadString(string paramName, out string value)
+        {
+            value = null;
+
+            if (!this.IsConnected)
+                return false;
+
+            var stringValue = new IMV_String { str = string.Empty };
+            if (this.camera.IMV_GetStringFeatureValue(paramName, ref stringValue) != IMV_OK)
+                return false;
+
+            value = stringValue.str ?? string.Empty;
+            return true;
+        }
+
+        private bool TryReadDoubleCore(string paramName, out double value)
+        {
+            value = 0;
+
+            if (!this.IsConnected)
+                return false;
+
+            var doubleValue = 0d;
+            if (this.camera.IMV_GetDoubleFeatureValue(paramName, ref doubleValue) != IMV_OK)
+                return false;
+
+            value = doubleValue;
+            return true;
+        }
+
+        #endregion
 
         /// <summary>
         /// 获取参数
@@ -539,13 +645,15 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         }
 
         /// <summary>
-        /// 释放相机（幂等，可重复调用），确保原生句柄被销毁
+        /// 释放相机（幂等，可重复调用），确保原生句柄被销毁。
+        /// 释放前必须排空在途回调：句柄先销毁会让回调中的原生帧失效。
         /// </summary>
         public void Dispose()
         {
             if (Interlocked.CompareExchange(ref this.disposed, 1, 0) == 1)
                 return;
 
+            this.operationGate.Wait();
             try
             {
                 if (this.camera != null)
@@ -553,6 +661,8 @@ namespace Junevy.EasyCamera.Vendors.IRayple
                     // 释放阶段不依赖状态位，直接以SDK真实状态为准，避免句柄在取流中被销毁
                     Interlocked.Exchange(ref this.isGrabbing, 0);
                     StopGrabbingCore();
+
+                    this.WaitForCallbacks();
 
                     try
                     {
@@ -571,22 +681,57 @@ namespace Junevy.EasyCamera.Vendors.IRayple
             {
                 Interlocked.Exchange(ref this.isOpen, 0);
                 Interlocked.Exchange(ref this.isGrabbing, 0);
+                this.operationGate.Release();
             }
         }
 
         /// <summary>
         /// 停止取流，以SDK真实取流状态为准
         /// </summary>
-        private void StopGrabbingCore()
+        private CameraResult StopGrabbingCore()
         {
             try
             {
                 if (this.camera != null && this.camera.IMV_IsGrabbing())
-                    this.camera.IMV_StopGrabbing();
+                {
+                    var result = this.camera.IMV_StopGrabbing();
+                    if (result != IMV_OK)
+                    {
+                        // native 失败时保留 isGrabbing=1，避免向上层伪装成已停止
+                        Interlocked.Exchange(ref this.isGrabbing, 1);
+                        this.SetLastError($"Stop grabbing failed with error code {result}.");
+                        return CameraResult.Fail(result, "Stop grabbing failed");
+                    }
+                }
+
+                this.SetLastError(null);
+                return CameraResult.Success(IMV_OK);
             }
-            catch
+            catch (Exception e)
             {
-                // 停止取流属于清理动作，失败不向上抛出
+                this.SetLastError(e.Message);
+                return CameraResult.Fail(-1, e.Message);
+            }
+        }
+
+        /// <summary>
+        /// 等待在途帧回调归还帧后再销毁原生句柄（带有限超时，避免释放永久阻塞）
+        /// </summary>
+        private void WaitForCallbacks()
+        {
+            lock (this.stateLock)
+            {
+                var deadline = DateTime.UtcNow + CallbackDrainTimeout;
+                while (this.inFlightCallbacks > 0)
+                {
+                    var remaining = deadline - DateTime.UtcNow;
+                    if (remaining <= TimeSpan.Zero || !Monitor.Wait(this.stateLock, remaining))
+                    {
+                        this.SetLastError(
+                            $"Timed out waiting for {this.inFlightCallbacks} in-flight frame callback(s) to drain.");
+                        break;
+                    }
+                }
             }
         }
 
@@ -606,6 +751,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
             finally
             {
                 this.camera = null;
+                Interlocked.Exchange(ref this.callbackAttached, 0);
             }
         }
 
@@ -619,11 +765,25 @@ namespace Junevy.EasyCamera.Vendors.IRayple
             if (pFrame.pData == IntPtr.Zero)
                 return;
 
+            bool shouldPublish;
+            lock (this.stateLock)
+            {
+                this.inFlightCallbacks++;
+                shouldPublish = Volatile.Read(ref this.disposed) == 0
+                    && Volatile.Read(ref this.isOpen) == 1
+                    && Volatile.Read(ref this.isGrabbing) == 1;
+            }
+
             try
             {
-                // 包装器构造时已复制像素数据，因此可安全地将原生帧归还SDK
-                var frame = new IRaypleFrameWrapper(pFrame);
-                this.stream.Publish(frame);
+                if (shouldPublish)
+                {
+                    // 包装器构造时已复制像素数据，因此可安全地将原生帧归还SDK
+                    var frame = new IRaypleFrameWrapper(pFrame);
+                    this.stream.Publish(frame);
+
+                    // 所有权已移交数据流，由订阅者负责释放
+                }
             }
             catch
             {
@@ -639,6 +799,16 @@ namespace Junevy.EasyCamera.Vendors.IRayple
                 {
                     // 归还帧失败不向上抛出
                 }
+
+                lock (this.stateLock)
+                {
+                    this.inFlightCallbacks--;
+                    if (this.inFlightCallbacks <= 0)
+                    {
+                        this.inFlightCallbacks = 0;
+                        Monitor.PulseAll(this.stateLock);
+                    }
+                }
             }
         }
 
@@ -651,7 +821,7 @@ namespace Junevy.EasyCamera.Vendors.IRayple
         /// </returns>
         private CameraResult CheckWriteable(string paramName)
         {
-            if (!this.IsConnected)
+            if (!this.IsConnected || this.camera == null)
                 return CameraResult.Fail(-1, "Camera is not open");
 
             if (string.IsNullOrEmpty(paramName))

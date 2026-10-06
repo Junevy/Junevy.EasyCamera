@@ -7,6 +7,7 @@ namespace Junevy.EasyCamera.Tests.Mocks
         public bool IsConnected { get; private set; }
         public bool IsDisposed { get; private set; }
         public bool IsGrabbing { get; private set; }
+        public string LastError { get; set; }
 
         public CameraResult Connect()
         {
@@ -26,9 +27,10 @@ namespace Junevy.EasyCamera.Tests.Mocks
             return CameraResult.Success(0);
         }
 
-        public void StopGrab()
+        public CameraResult StopGrab()
         {
             IsGrabbing = false;
+            return CameraResult.Success(0);
         }
 
         public CameraResult SetParam(string paramName, int value)
@@ -83,9 +85,12 @@ namespace Junevy.EasyCamera.Tests.Mocks
             return CameraResult.Success(0);
         }
 
+        /// <summary>GetSerialNumber 的可编程返回值，供按序列号匹配的用例使用</summary>
+        public string SerialNumberToReport { get; set; } = string.Empty;
+
         public string GetSerialNumber()
         {
-            return string.Empty;
+            return this.SerialNumberToReport;
         }
 
         public void Dispose()

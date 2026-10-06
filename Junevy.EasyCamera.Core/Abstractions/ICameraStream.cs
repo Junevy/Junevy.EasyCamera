@@ -17,6 +17,14 @@ namespace Junevy.EasyCamera.Core.Abstractions
         int SubscriberCount { get; }
 
         /// <summary>
+        /// 帧流统计快照（累计发布/投递/丢弃帧数）。
+        /// 用于现场排查"图像卡顿、丢帧"：<see cref="FrameStreamStatistics.Dropped" />
+        /// 持续增长说明下游消费慢于采集，应加大 <see cref="Junevy.EasyCamera.Core.Common.IStreamOptions.StreamCapacity" />
+        /// 或优化 handler。
+        /// </summary>
+        FrameStreamStatistics Statistics { get; }
+
+        /// <summary>
         /// 发布一帧图像。
         /// 发布方将帧的初始引用转移给流：流为每个成功入队的订阅者增加一个引用，
         /// 并负责在消费、淘汰、取消或流释放时释放；Publish 返回后发布方不得再访问该帧。

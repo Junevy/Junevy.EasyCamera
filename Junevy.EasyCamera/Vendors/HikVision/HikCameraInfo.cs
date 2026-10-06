@@ -7,7 +7,7 @@ namespace Junevy.EasyCamera.Vendors.HikVision
     /// <summary>
     /// 海康工业相机设备信息
     /// </summary>
-    public class HikCameraInfo : ICameraInfo
+    public class HikCameraInfo : ICameraInfo, INamedCameraInfo
     {
         /// <summary>
         /// 相机序列号
@@ -78,12 +78,9 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// <returns>
         /// 是否设置成功
         /// </returns>
-        public bool SetDefinedName(string name)
+        bool INamedCameraInfo.SetDefinedName(string name)
         {
-            if (string.IsNullOrEmpty(name))
-                return false;
-
-            if (name.Length > 64)
+            if (string.IsNullOrEmpty(name) || name.Length > 64)
                 return false;
 
             this.UserDefinedName = name;

@@ -2,6 +2,7 @@ using Junevy.EasyCamera.Core.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace Junevy.EasyCamera.Common
 {
@@ -9,7 +10,12 @@ namespace Junevy.EasyCamera.Common
     /// 聚合相机提供器，将多个厂商提供器聚合为一个统一入口：
     /// 枚举时合并所有厂商的设备；创建时按相机信息类型分发到对应厂商。
     /// </summary>
-    public sealed class AggregateCameraProvider : ICameraProvider
+    /// <remarks>
+    /// 厂商独有能力按"能力接口"探测（<see cref="ILinkStatusProbeProvider" />）：
+    /// 没有厂商具备该能力时返回 <see cref="CameraLinkStatus.Unknown" />，
+    /// 由调用方决定回退策略，新增厂商无需改动本类。
+    /// </remarks>
+    public sealed class AggregateCameraProvider : ICameraProvider, ILinkStatusProbeProvider
     {
         private readonly IVendorCameraProvider[] vendors;
 
@@ -84,6 +90,30 @@ namespace Junevy.EasyCamera.Common
         public IEnumerable<ICameraInfo> Enumerate(CameraInterfaceType type)
         {
             return this.vendors.SelectMany(v => v.Enumerate(type));
+        }
+
+        /// <summary>
+        /// 探测指定相机的链路状态：按厂商支持关系分发到第一个具备
+        /// <see cref="ILinkStatusProbeProvider" /> 能力的厂商提供器。
+        /// 没有厂商具备该能力时返回 <see cref="CameraLinkStatus.Unknown"/>，由调用方决定回退策略
+        /// </summary>
+        /// <param name="info">相机信息</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>探测结果；无厂商具备探测能力时返回 <see cref="CameraLinkStatus.Unknown"/></returns>
+        public CameraLinkStatus ProbeLinkStatus(ICameraInfo info, CancellationToken cancellationToken = default)
+        {
+            if (info == null)
+                return CameraLinkStatus.Unknown;
+
+            foreach (var vendor in this.vendors)
+            {
+                if (vendor is not ILinkStatusProbeProvider probeProvider || !vendor.Supports(info))
+                    continue;
+
+                return probeProvider.ProbeLinkStatus(info, cancellationToken);
+            }
+
+            return CameraLinkStatus.Unknown;
         }
     }
 }

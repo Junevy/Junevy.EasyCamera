@@ -7,8 +7,14 @@ using System.Threading;
 namespace Junevy.EasyCamera.Vendors.HikVision
 {
     /// <summary>
-    /// 海康相机图像帧包装器
+    /// 海康相机图像帧包装器。
     /// </summary>
+    /// <remarks>
+    /// 并发纪律：图像的固有元数据（宽高、步长、像素格式、大小）在构造时一次性从原生帧快照，
+    /// 之后全部是字段读取——既消除每帧重复穿透 SDK，也消除了"先判已释放再读原生内存"的竞态。
+    /// 仍需触碰原生内存的只有 <see cref="Data" />、<see cref="PixelDataPtr" /> 与
+    /// <see cref="GetBitmap" />，三者都在 <see cref="refLock" /> 内执行，与引用计数归零物理释放互斥。
+    /// </remarks>
     public class HikFrameWrapper : IFrame
     {
         /// <summary>
@@ -17,13 +23,39 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         private readonly IFrameOut native;
 
         /// <summary>
+        /// 图像宽度（构造时快照）
+        /// </summary>
+        private readonly uint width;
+
+        /// <summary>
+        /// 图像高度（构造时快照）
+        /// </summary>
+        private readonly uint height;
+
+        /// <summary>
+        /// 图像大小，单位：字节（构造时快照）
+        /// </summary>
+        private readonly ulong imageSize;
+
+        /// <summary>
+        /// 图像行步长，单位：字节（构造时快照）
+        /// </summary>
+        private readonly int stride;
+
+        /// <summary>
+        /// 图像像素格式（构造时快照）
+        /// </summary>
+        private readonly ImagePixelFormat pixelType;
+
+        /// <summary>
         /// 引用计数，初始为发布方持有的1个引用
         /// </summary>
         private int refCount = 1;
 
         /// <summary>
         /// 引用计数保护锁，串行化 AddRef 与最后一次 Dispose 的竞态，
-        /// 防止引用计数为1时 AddRef 与释放并发导致 use-after-free
+        /// 防止引用计数为1时 AddRef 与释放并发导致 use-after-free；
+        /// 同时保护 <see cref="pixelData" /> 的填充与原生内存读取
         /// </summary>
         private readonly object refLock = new();
 
@@ -48,6 +80,14 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         public HikFrameWrapper(IFrameOut nativeFrame)
         {
             this.native = nativeFrame ?? throw new ArgumentNullException(nameof(nativeFrame));
+
+            // 固有元数据一次性快照：此后不再触碰原生帧的这些属性
+            var image = nativeFrame.Image;
+            this.width = image.Width;
+            this.height = image.Height;
+            this.imageSize = image.ImageSize;
+            this.pixelType = ConvertFormat(image.PixelType);
+            this.stride = this.height > 0 ? (int)(this.imageSize / this.height) : 0;
         }
 
         /// <summary>
@@ -55,7 +95,14 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// 注意：指针生命周期由具体实现管理，可能在相机缓存队列满时失效，
         /// 建议使用更安全的属性 <see cref="Data" />
         /// </summary>
-        public IntPtr PixelDataPtr => this.native.Image.PixelDataPtr;
+        public IntPtr PixelDataPtr
+        {
+            get
+            {
+                lock (this.refLock)
+                    return Volatile.Read(ref this.disposed) == 1 ? IntPtr.Zero : this.native.Image.PixelDataPtr;
+            }
+        }
 
         /// <summary>
         /// 图像数据数组，托管内存（首次访问时缓存；
@@ -65,42 +112,49 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         {
             get
             {
-                var cached = this.pixelData;
+                var cached = Volatile.Read(ref this.pixelData);
                 if (cached != null)
                     return cached;
 
-                if (Volatile.Read(ref this.disposed) == 1)
-                    return Array.Empty<byte>();
+                lock (this.refLock)
+                {
+                    // 与最后一次 Dispose 互斥：不会出现"判未释放 → 读已释放原生内存"
+                    if (this.pixelData != null)
+                        return this.pixelData;
 
-                var data = this.native.Image.PixelData;
-                return Interlocked.CompareExchange(ref this.pixelData, data, null) ?? data;
+                    if (Volatile.Read(ref this.disposed) == 1)
+                        return Array.Empty<byte>();
+
+                    this.pixelData = this.native.Image.PixelData;
+                    return this.pixelData;
+                }
             }
         }
 
         /// <summary>
         /// 图像行步长，单位：字节
         /// </summary>
-        public int Stride => this.Height > 0 ? (int)(this.ImageSize / this.Height) : 0;
+        public int Stride => this.stride;
 
         /// <summary>
         /// 图像宽度
         /// </summary>
-        public uint Width => this.native.Image.Width;
+        public uint Width => this.width;
 
         /// <summary>
         /// 图像高度
         /// </summary>
-        public uint Height => this.native.Image.Height;
+        public uint Height => this.height;
 
         /// <summary>
         /// 图像像素格式
         /// </summary>
-        public ImagePixelFormat PixelType => ConvertFormat(this.native.Image.PixelType);
+        public ImagePixelFormat PixelType => this.pixelType;
 
         /// <summary>
         /// 图像大小，单位：字节
         /// </summary>
-        public ulong ImageSize => this.native.Image.ImageSize;
+        public ulong ImageSize => this.imageSize;
 
         /// <summary>
         /// 增加引用计数。已释放的帧不能重新取得引用，避免下游继续访问已释放的原生图像。
@@ -169,10 +223,13 @@ namespace Junevy.EasyCamera.Vendors.HikVision
         /// </returns>
         public Bitmap GetBitmap()
         {
-            if (Volatile.Read(ref this.disposed) == 1)
-                return null;
+            lock (this.refLock)
+            {
+                if (Volatile.Read(ref this.disposed) == 1)
+                    return null;
 
-            return this.native.Image.ToBitmap();
+                return this.native.Image.ToBitmap();
+            }
         }
 
         /// <summary>

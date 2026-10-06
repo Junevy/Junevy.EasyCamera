@@ -49,7 +49,7 @@
 		放进包内，也不会产生依赖声明 → 消费方还原后 Initialize 抛 TypeInitializationException、
 		EnumerateCameras 抛 FileNotFoundException('MvCameraControl.Net')。
 
-		两条硬约束（都踩过坑，改动前务必先读 docs/代码审查报告-2026-10-06.md 第五节（消费方打包验证））：
+		两条硬约束（都踩过坑，改动前务必先读 docs/代码审查报告-2026-10-06.md 第四节（消费方打包验证））：
 		1) PackagePath 必须逐个 TFM 写全（lib/net48;lib/net8.0）。写成与 TFM 无关的 "lib/" 时，
 		   NuGet 会因为包内已存在 lib/<tfm>/ 目录而**整体忽略**根目录文件，消费方依旧拿不到。
 		2) 这里不能用 Condition="'$(TargetFramework)' == ..." 分组：多目标项目打包走外层构建，

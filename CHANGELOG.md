@@ -72,7 +72,7 @@
 - 测试：新增 `CameraServiceProbeTests` 6 项（自持早退不触厂商、可达/不可达路由、回退探测后无注册表残留、打开失败报 Occupied、序列号匹配）；`MockCamera` 增加 `SerialNumberToReport` 可编程属性。全量 92/92（net48 + net8.0 双目标）。
 - 应用侧配套（AutomationSystem 仓库）：对话框与相机采集节点升级 1.0.1，节点配置页三态徽章与"确保已连接"复用语义；连接生命周期进程级池化，废止"对话框关闭即断开"契约。
 
-## 2026-10-05（2026-10-05 审查问题修复）
+## 2026-10-05（审查问题修复）
 
 审查报告见 `docs/代码审查报告-2026-10-05.md`，实施计划见 `docs/superpowers/plans/2026-10-05-review-findings-fix.md`。
 

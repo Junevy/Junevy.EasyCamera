@@ -1,6 +1,6 @@
 ---
 name: using-junevy-easycamera
-description: Use when a .NET project integrates the Junevy.EasyCamera NuGet package (v1.1.0) to operate industrial cameras (HikVision/海康, future Basler/IRayple) — writing DI registration, enumerate/open cameras, subscribing frame streams, frame 释放/泄漏 questions, frame 丢帧/卡顿排查 (GetStreamStatistics/BackpressureMode), 相机链路状态徽章 (CameraLinkStatus 五态), BadImageFormatException (x64), trigger configuration, camera close/reopen flows, or upgrading from 1.0.x. Use when 代码需要订阅工业相机帧流、处理 IFrame 生命周期、排查丢帧与链路占用、或排除相机接入故障。
+description: Use when a .NET project integrates the Junevy.EasyCamera NuGet package (v1.1.1+) to operate industrial cameras (HikVision/海康, future Basler/IRayple) — writing DI registration, enumerate/open cameras, subscribing frame streams, frame 释放/泄漏 questions, frame 丢帧/卡顿排查 (GetStreamStatistics/BackpressureMode), 相机链路状态徽章 (CameraLinkStatus 五态), BadImageFormatException (x64), trigger configuration, camera close/reopen flows, or upgrading from 1.0.x. Use when 代码需要订阅工业相机帧流、处理 IFrame 生命周期、排查丢帧与链路占用、或排除相机接入故障。
 ---
 
 # Using Junevy.EasyCamera

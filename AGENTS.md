@@ -30,7 +30,7 @@
 - **厂商托管封装必须随 NuGet 包分发**（2026-10-06 消费方崩溃后确立）：`<Reference HintPath>` 只影响本仓库输出目录，`dotnet pack` 既不打包文件引用也不产生依赖声明，消费方必然 `FileNotFoundException`。修法是 `Junevy.EasyCamera.csproj` 中无条件 `Pack` 项 + `PackagePath="lib/net48;lib/net8.0"`，**禁止**写成 `"lib/"`（会被 NuGet 忽略），**禁止**按 `$(TargetFramework)` 分条件（外层构建时该变量为空）。新增品牌照此追加。
 - **包版本必须递增**：NuGet 按 `id + version` 缓存，同版本重发不会被消费方采用。修复打包类问题务必升版本并在升级说明里写明"清理缓存"。
 - `Tests/Packaging/PackageContentTests.cs` 是打包内容的回归守卫：改动打包规则后必须确认它仍然通过（移除规则时它必须失败）。
-- 包版本由根目录 `Directory.Packages.props`（中央包管理）统一维护；net48 通过条件引用补充 BCL 兼容包，net8.0 使用 `System.Drawing.Common`。
+- 第三方包版本由根目录 `Directory.Packages.props`（中央包管理）统一维护；**本库版本写在各 csproj 的 `<Version>`**，`AssemblyVersion/FileVersion` 写在手写的 `Properties/AssemblyInfo.cs`，三者必须同步；net48 通过条件引用补充 BCL 兼容包，net8.0 使用 `System.Drawing.Common`。
 - 两个类库在 net8.0 下声明程序集级 `SupportedOSPlatform("windows")`（工业相机 SDK 场景仅 Windows/x64），声明位置见下方并发纪律最后一条。
 - 根目录 `global.json` 固定 SDK 9.0.316，保证构建/测试可复现。
 - IRayple 厂商标记为 `[Obsolete("未开发完毕", true)]`：`ServiceCollectionExtensions` 不注册其服务，启用 `EnableIRayple` 时与 Basler 一致抛出 `NotImplementedException`。
@@ -73,3 +73,13 @@ dotnet test .\Junevy.EasyCamera.Tests\Junevy.EasyCamera.Tests.csproj -c Release 
 ```
 
 验收基线（2026-10-06）：全量重建 0 错误 0 警告；net48 与 net8.0 各 124/124 通过。
+
+## 5. 知识库
+
+本库的 Obsidian 知识库位于 `D:\Desktop\doc\ObsidianDocs\Junevy.EasyCamera`（独立 git 仓库），入口 `知识库首页.md`，正文在 `zh/content/<主题>/`。用普通文件工具按路径访问（Read/Grep/Glob、shell），不要依赖 filesystem MCP：`@modelcontextprotocol/server-filesystem` 在客户端支持 roots 时会把允许目录替换成当前工作目录。
+
+- **开发前**：按 `知识库首页.md` 的"按场景找笔记"读取相关笔记；改并发/资源代码前必读 `并发与资源/并发纪律`，改动对照 `Agent协作/文档同步清单与任务配方`。
+- **改完后，同一会话内回写**：公共 API/契约、并发纪律、打包规则、厂商适配或设计决策变化时，更新对应笔记（优先改已有笔记；新增笔记挂进 `知识库首页.md` 分类索引），并更新首页"版本与时效"中的版本号。与本文件第 3 节"同步 Skill / CHANGELOG / AGENTS.md"一起完成。
+- **不自行提交**：写完运行 `git -C <知识库路径> status --short` 与 `git -C <知识库路径> diff --stat`，把结果放进汇报，由用户决定提交；代为提交时提交信息写明对应的代码改动或版本号。
+- 权威顺序：代码 > 本文件 > `CHANGELOG.md` > `docs/` 审查报告 > 知识库笔记正文。
+- 消费方（如 AutomationSystem）的会话只读本知识库；它们发现的不一致会在汇报中指出，由本仓库会话核实后修正。

@@ -21,6 +21,9 @@ namespace Junevy.EasyCamera.Common
         private readonly IStreamManager streamManager = streamManager;
         private readonly IStreamOptions streamOptions = streamOptions ?? new StreamOptions();
 
+        /// <inheritdoc />
+        public event EventHandler<CameraDisconnectedEventArgs> CameraDisconnected;
+
         /// <summary>
         /// 相机 key 级操作锁：OpenCamera/Close/StartGrab/StopGrab/SetTrigger 按 key 串行。
         /// 锁对象按 key 只增不减：key 数量量级 ≈ 相机数（小且稳定），可接受；
@@ -42,6 +45,12 @@ namespace Junevy.EasyCamera.Common
         /// 相机以 cameraKey 注册；其帧数据流同样以 cameraKey 创建，
         /// 因此后续订阅/取消订阅必须使用相同的 cameraKey。
         /// </summary>
+        /// <remarks>
+        /// 相机掉线后仍保持注册（不可用），可对同一 key 再次调用本方法重连（相机内部释放旧句柄并重建，
+        /// 重连后需重新 <see cref="StartGrab(string)" />，帧流订阅保留无需重订）。
+        /// 若设备 IP/枚举信息已变化，应先 <see cref="Close(string)" /> 再用新的 info 打开：
+        /// 对已注册的 key，本方法沿用注册时的相机实例与设备信息。
+        /// </remarks>
         /// <param name="info">相机信息</param>
         /// <param name="cameraKey">相机的操作Key，用于获取相机实例及其数据流</param>
         /// <returns>
@@ -80,6 +89,10 @@ namespace Junevy.EasyCamera.Common
                         else
                         {
                             registered = true;
+
+                            // 每个相机实例只订阅一次：掉线事件统一转发为门面事件，并补上操作 Key
+                            if (camera is IConnectionMonitor monitor)
+                                monitor.Disconnected += (_, e) => this.RaiseCameraDisconnected(e.WithCameraKey(cameraKey));
                         }
                     }
 
@@ -218,7 +231,8 @@ namespace Junevy.EasyCamera.Common
 
             lock (this.GetKeyLock(cameraKey))
             {
-                if (!cameraManager.TryGet(cameraKey, out var camera) || !camera.IsConnected)
+                // 相机存在即交给相机层处理：停流幂等，掉线（未连接但仍注册）后同样尽力停止原生取流
+                if (!cameraManager.TryGet(cameraKey, out var camera))
                     return CameraResult.Fail(-1, ErrorMsg);
 
                 var result = camera.StopGrab();
@@ -252,8 +266,33 @@ namespace Junevy.EasyCamera.Common
                 {
                     CameraRemoveStatus.Removed => CameraResult.Success(0),
                     CameraRemoveStatus.NotFound => CameraResult.Fail(-1, ErrorMsg),
+
+                    // 相机已先从注册表移除，释放过程才报错：消息必须说明相机已不在注册表中，避免调用方误以为仍在
+                    CameraRemoveStatus.ReleaseFailed => CameraResult.Fail(-1, $"The camera has been removed from the registry and released, but the release reported errors: {this.cameraManager.LastError ?? "unknown error"}"),
                     _ => CameraResult.Fail(-1, this.cameraManager.LastError ?? "Dispose camera error")
                 };
+            }
+        }
+
+        /// <summary>
+        /// 向门面订阅者转发掉线事件；逐个调用并吞掉处理程序异常，不影响其余订阅者，也不拖垮相机的派发线程。
+        /// </summary>
+        private void RaiseCameraDisconnected(CameraDisconnectedEventArgs args)
+        {
+            var handler = this.CameraDisconnected;
+            if (handler == null)
+                return;
+
+            foreach (var subscriber in handler.GetInvocationList())
+            {
+                try
+                {
+                    ((EventHandler<CameraDisconnectedEventArgs>)subscriber)(this, args);
+                }
+                catch
+                {
+                    // 单个订阅者的异常不得外泄到相机的派发线程
+                }
             }
         }
 
@@ -486,8 +525,9 @@ namespace Junevy.EasyCamera.Common
         }
 
         /// <summary>
-        /// 调用厂商非侵入探测：厂商未实现能力或调用失败（SDK 未初始化、设备枚举异常等）
-        /// 一律返回 <c>null</c>，由调用方回退到侵入式探测，绝不把异常抛给界面线程
+        /// 调用厂商非侵入探测。以下情况一律返回 <c>null</c>，由调用方回退到侵入式探测：
+        /// 厂商未实现能力、调用失败（SDK 未初始化、设备枚举异常等，绝不把异常抛给界面线程），
+        /// 或厂商返回 <see cref="CameraLinkStatus.Unknown" />（厂商无法判定）。
         /// </summary>
         private CameraLinkStatus? TryProbeByVendor(ICameraInfo info, CancellationToken cancellationToken)
         {
@@ -496,7 +536,13 @@ namespace Junevy.EasyCamera.Common
 
             try
             {
-                return probeProvider.ProbeLinkStatus(info, cancellationToken);
+                var status = probeProvider.ProbeLinkStatus(info, cancellationToken);
+
+                // Unknown = 厂商无法判定，交由侵入式回退；它不是有效的探测结论
+                if (status == CameraLinkStatus.Unknown)
+                    return null;
+
+                return status;
             }
             catch (OperationCanceledException)
             {

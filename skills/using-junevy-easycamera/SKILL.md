@@ -1,6 +1,6 @@
 ---
 name: using-junevy-easycamera
-description: Use when a .NET project integrates the Junevy.EasyCamera NuGet package (v1.1.1+) to operate industrial cameras (HikVision/海康, future Basler/IRayple) — writing DI registration, enumerate/open cameras, subscribing frame streams, frame 释放/泄漏 questions, frame 丢帧/卡顿排查 (GetStreamStatistics/BackpressureMode), 相机链路状态徽章 (CameraLinkStatus 五态), BadImageFormatException (x64), trigger configuration, camera close/reopen flows, or upgrading from 1.0.x. Use when 代码需要订阅工业相机帧流、处理 IFrame 生命周期、排查丢帧与链路占用、或排除相机接入故障。
+description: Use when a .NET project integrates the Junevy.EasyCamera NuGet package (v1.2.0+) to operate industrial cameras (HikVision/海康, future Basler/IRayple) — writing DI registration, enumerate/open cameras, subscribing frame streams, frame 释放/泄漏 questions, frame 丢帧/卡顿排查 (GetStreamStatistics/BackpressureMode), 相机链路状态徽章 (CameraLinkStatus 五态), BadImageFormatException (x64), trigger configuration, camera close/reopen flows, 相机掉线检测与重连 (CameraDisconnected), or upgrading from 1.0.x. Use when 代码需要订阅工业相机帧流、处理 IFrame 生命周期、排查丢帧与链路占用、或排除相机接入故障。
 ---
 
 # Using Junevy.EasyCamera
@@ -119,15 +119,31 @@ public partial class App : PrismApplication
 | 触发 | `CameraResult SetTrigger(key, string triggerSource, bool enableTrigger)` | GenICam 名 `TriggerMode`/`TriggerSource`；改完须重新 StartGrab；关闭触发时 triggerSource 仍须传有效符号名 |
 | 参数 | `bool TryGetParam<T>(key, name, out v)` / `CameraResult SetParam(key, name, v)`（int/float/bool/string 重载） | Try 版可区分"值恰为 default"与"取参失败"；支持 int/long/float/double/bool/string |
 | 读回触发 | `string GetEnumParam(key, "TriggerMode")` → `"On"/"Off"` | 失败或相机不可用返回空字符串；`TriggerSource` → 符号名如 `"Line1"` |
-| 关闭 | `CameraResult Close(key)` | 失败原因经 Message 区分 NotFound / ReleaseFailed；帧流不删 |
+| 关闭 | `CameraResult Close(key)` | 失败原因经 Message 区分 NotFound / ReleaseFailed（ReleaseFailed = 相机已从注册表移除，但释放过程报错，Message 写明原因）；帧流不删 |
 | 序列号 | `string GetSerialNumber(key)` | 已注册相机的序列号，与"在线"无关 |
 | 自持判定 | `bool IsSerialConnected(string serial)` | 零侵入：扫描连接注册表按序列号匹配，不触硬件 |
-| 链路探测 | `CameraLinkStatus ProbeCameraLinkStatus(ICameraInfo info, CancellationToken ct = default)` | 五态：自持早退 `Connected`；厂商可达性查询（海康 `DeviceEnumerator.IsDeviceAccessible`，独占模式，非侵入）；可达 `Idle`、在线不可达 `Occupied`、枚举不到 `Unreachable`、无法判定 `Unknown`。厂商无探测能力时回退侵入式 `probe:{serial}` 开关探测（探测连接与帧流都不残留）。可能触发厂商枚举，应在后台线程调用 |
+| 链路探测 | `CameraLinkStatus ProbeCameraLinkStatus(ICameraInfo info, CancellationToken ct = default)` | 五态：自持早退 `Connected`；厂商可达性查询（海康 `DeviceEnumerator.IsDeviceAccessible`，独占模式，非侵入）；可达 `Idle`、在线不可达 `Occupied`、枚举不到 `Unreachable`、无法判定 `Unknown`。厂商无探测能力、或厂商返回 `Unknown`（无法判定）时回退侵入式 `probe:{serial}` 开关探测（探测连接与帧流都不残留）。可能触发厂商枚举，应在后台线程调用 |
 | 丢帧统计 | `FrameStreamStatistics GetStreamStatistics(key)` | 累计 `Published/Delivered/Dropped`；未打开相机返回空统计 |
+| 掉线通知 | `event EventHandler<CameraDisconnectedEventArgs> CameraDisconnected` | 1.2.0+；事件在线程池线程触发；`e.CameraKey` 为掉线相机的 key；详见下节"掉线处理" |
 
 `CameraLinkStatus`（`Junevy.EasyCamera.Core.Abstractions`）：`Unknown=0`（未能判定，**默认值，不要把任何确定状态排到 0**）、`Connected`=本进程持有连接、`Idle`=在线未被持有且可达、`Occupied`=在线但不可达（被其它客户端独占）、`Unreachable`=枚举中不存在（掉线/未上电）。注意：本进程独占持有的相机会令可达性查询返回 false，因此自持判定（注册表扫描）必须在可达性检查之前。
 
 `CameraResult`：成员 `IsSuccess`/`Code`/`Message`；只用 `IsSuccess` 判成败，`Code` 是厂商原生错误码（成功恒 0），`Message` 为可读诊断。
+
+## 掉线处理（1.2.0+）
+
+设备拔线、断网后，海康 SDK 会上报设备异常（`DisConnect`），库据此把相机标记为掉线：
+
+1. **订阅 `CameraDisconnected` 获知掉线**（同一次连接最多通知一次）：
+   ```csharp
+   service.CameraDisconnected += (_, e) =>
+       log.Warn("相机 {Key} 掉线：{Reason}（序列号 {Sn}，{Time:O}）", e.CameraKey, e.Reason, e.SerialNumber, e.OccurredAtUtc);
+   ```
+2. **线程**：事件在**线程池线程**上触发，不是 UI 线程。更新界面前需自行封送（如 `Dispatcher.BeginInvoke`）。处理程序异常由库吞掉，不影响其他订阅者，因此处理程序内部要自行记录日志。
+3. **掉线后的相机状态**：相机仍保持注册（不可用）。`IsConnected` 为 false，`StartGrab` 失败；`StopGrab(key)` 返回成功（尽力停流）。帧流订阅**保留**，无需重订。
+4. **重连**：对同一 key 再次 `OpenCamera(info, key)`，库会释放旧句柄并重建设备。重连成功后需重新 `StartGrab(key)`。若设备 IP 或枚举信息已变化（换网口、DHCP 改址），先 `Close(key)`，再用新的枚举结果 `OpenCamera`——对已注册的 key 沿用注册时的设备信息。重连失败（例如设备已不可枚举）时相机仍保持注册，直接 `Close(key)` 即可成功移除，无需额外处理。
+5. **释放**：对掉线相机调用 `Close(key)` 同样返回成功并释放句柄；关闭过程中掉线也按释放成功处理。`Close` 幂等，重复调用仍返回成功。之后要再使用需重新 `OpenCamera`。
+6. **库不做自动重连**：是否重连、何时重连、重试几次由调用方决定，例如在后台定时器中：`if (service.OpenCamera(info, key).IsSuccess) service.StartGrab(key);`。不要在处理程序里同步阻塞等待重连（占用线程池线程）。
 
 ## Common Mistakes
 
@@ -148,6 +164,7 @@ public partial class App : PrismApplication
 | `BadImageFormatException` | 宿主非 x64，改 PlatformTarget=x64 |
 | `FileNotFoundException: Could not load file or assembly 'MvCameraControl.Net'` | 用了 ≤1.1.0 的包（厂商托管封装未随包分发）。升级到 1.1.1+；**并清理旧版本 NuGet 缓存**——NuGet 按 id+version 缓存，同版本重发不会被采用 |
 | `Initialize` 抛 `DllNotFoundException` / 枚举不到设备，但托管封装已在 | 厂商原生运行时未安装或不在 PATH；安装 MVS 并确认 `...\Common Files\MVS\Runtime\Win64_x64` 在 PATH |
+| `Initialize` 抛 `InvalidOperationException`（"...initialize failed with error code 0x..."），DI 路径下包在 `AggregateException` 里 | 海康原生初始化返回非 0 错误码（1.1.2 起不再静默忽略）；错误码含义以厂商 SDK 文档为准，先排查 MVS 运行时安装、x64 与 PATH |
 | 手工拷了厂商 DLL 到 exe 旁边仍然崩 | 对 .NET Core 无效（不走 deps.json 探测）；必须通过 NuGet 依赖分发 |
 | 枚举为空 | 相机未上电/网段不通/GigE 带宽防火墙；看 Trace 警告里的厂商错误码 |
 | 收不到帧 | 未 StartGrab；cameraKey 不匹配；订阅被异常摘除；触发模式下无触发信号 |
@@ -176,4 +193,21 @@ public partial class App : PrismApplication
    - 删 `%USERPROFILE%\.nuget\packages\junevy.easycamera*`，或
    - 还原加 `--force`；若本机把缓存放在自定义 `RestorePackagesPath`（如 `D:\Documents\Nuget\RemoteCache`），须删该目录下的 `junevy.easycamera*`。
 3. 确认输出目录出现 `MvCameraControl.Net.dll` 与 `MVSDK_Net.dll`；若没有，说明拿到的仍是旧包。
+
+## 从 1.1.1 升级到 1.1.2（行为修正，无 API 变更）
+
+1. 升级包版本到 1.1.2（缓存清理规则同上一节）。
+2. `ICameraSdkSystem.Initialize()`：海康原生初始化返回非 0 错误码时，现在抛 `InvalidOperationException`（此前静默继续，表现为枚举为空）。非 DI 的单厂商路径直接抛出；DI 路径（`AddEasyCamera`）经 `CompositeCameraSdkSystem` 包装为 `AggregateException`，内层即该异常。启动路径应捕获并给出明确提示。
+3. 链路探测：厂商探测返回 `Unknown` 时现在回退侵入式探测，结果可能由 `Unknown` 变为 `Idle` / `Occupied`。侵入式探测会短暂打开相机，继续保持在后台线程调用。
+4. `Close` 的 `ReleaseFailed` 消息文本已改（见速查表）；只按 `IsSuccess` 判断的代码无需改动。
+5. 同一厂商在 builder 中重复启用（如两次 `EnableHikVision()`）现在去重，不再重复注册提供器与 SDK 系统。
+
+## 从 1.1.2 升级到 1.2.0（新增公共 API；门面 StopGrab 行为变化）
+
+1. 升级包版本到 1.2.0（缓存清理规则同 1.1.1 节）。
+2. `ICameraService` 新增 `event EventHandler<CameraDisconnectedEventArgs> CameraDisconnected`；**自行实现该接口的代码必须补该成员**（`CameraService` 已实现）。
+3. `ICameraService.StopGrab(key)`：对"已注册但未连接（掉线）"的相机由失败改为调用相机层并返回成功；未注册的 key 仍返回失败。依赖旧失败语义的代码需复核。
+4. 掉线相机保持注册：`OpenCamera` 对同一 key 是重连而非新建，`Close(key)` 仍是释放它的唯一入口。
+5. 新增能力接口 `IConnectionMonitor`（相机侧 `Disconnected` 事件）与参数类型 `CameraDisconnectedEventArgs`，仅供厂商实现与门面内部使用；消费方一般无需直接引用。
+6. `ICamera.Close`（直接使用厂商相机对象时）对从未打开的相机也幂等成功，不再报 `Camera not initialized`。经门面 `Close(key)` 的调用无感知。
 4. 仍需确认厂商**原生**运行时（MVS）已安装且 `...\Common Files\MVS\Runtime\Win64_x64` 在 PATH——这与托管封装是两回事。

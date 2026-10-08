@@ -100,6 +100,24 @@ finally
 }
 ```
 
+### 掉线处理（1.2.0+）
+
+拔线或断网后，相机保持注册但不可用，`CameraDisconnected` 事件通知掉线（线程池线程，同一次连接最多一次）。库不做自动重连，由调用方决定何时重连：
+
+```csharp
+cameraService.CameraDisconnected += (_, e) =>
+{
+    // e.CameraKey 为打开时使用的 key；此处在线程池线程上，更新界面需自行封送
+    Log.Warning("相机 {Key} 掉线：{Reason}", e.CameraKey, e.Reason);
+};
+
+// 重连：对同一 key 再次 OpenCamera（旧句柄会被释放并重建），成功后重新 StartGrab；帧流订阅保留
+if (cameraService.OpenCamera(info, "cam-1").IsSuccess)
+    cameraService.StartGrab("cam-1");
+```
+
+设备 IP 或枚举信息已变化时，先 `Close("cam-1")`，再用新的枚举结果调用 `OpenCamera`。
+
 ## 简易使用（Builder，不依赖 DI）
 
 ```csharp

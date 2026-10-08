@@ -43,9 +43,15 @@ namespace Junevy.EasyCamera
         private readonly List<Func<StreamOptions, IVendorCameraProvider>> providerFactories = new List<Func<StreamOptions, IVendorCameraProvider>>();
         private readonly List<Func<StreamOptions, ICameraSdkSystem>> sdkFactories = new List<Func<StreamOptions, ICameraSdkSystem>>();
 
-        /// <summary>启用海康（HikVision）相机支持</summary>
+        /// <summary>已启用的厂商名集合，用于同一厂商重复启用时去重</summary>
+        private readonly HashSet<string> enabledVendors = new(StringComparer.Ordinal);
+
+        /// <summary>启用海康（HikVision）相机支持。重复调用去重为单实例语义，等价于调用一次</summary>
         public EasyCameraBuilder EnableHikVision()
         {
+            if (!this.enabledVendors.Add("HikVision"))
+                return this;
+
             this.providerFactories.Add(o => new HikCameraProvider(o));
             this.sdkFactories.Add(_ => new HikCameraSdkSystem());
             return this;
@@ -72,6 +78,9 @@ namespace Junevy.EasyCamera
             configure(this.streamOptions);
             return this;
         }
+
+        /// <summary>已注册的厂商提供器数量（去重后）；仅供测试验证去重语义</summary>
+        internal int EnabledVendorCount => this.providerFactories.Count;
 
         /// <summary>
         /// 组装相机栈。至少须启用一个厂商；同一厂商重复启用会被去重为单实例语义

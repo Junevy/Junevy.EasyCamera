@@ -52,6 +52,7 @@
 | `IsSerialConnected(serial)` | `bool` | 遍历 `ICameraManager.Snapshot()` 按序列号匹配，任意 key 命中即 `true` |
 | `ProbeCameraLinkStatus(info, CancellationToken cancellationToken = default)` | `CameraLinkStatus` | 见下文 |
 | `GetStreamStatistics(cameraKey)` | `FrameStreamStatistics` | 相机未打开/从未订阅/流管理器已释放时返回 `FrameStreamStatistics.Empty` |
+| `event CameraDisconnected` | `EventHandler<CameraDisconnectedEventArgs>` | 1.2.0 新增。相机实现 `IConnectionMonitor` 时由门面转发，`CameraKey` 为掉线相机的操作 Key；线程池线程触发；订阅者异常被吞掉 |
 
 参数与命令类成员**不**持有 per-key 锁（只有生命周期与取流类成员持锁），它们只做"查注册表 → 判 `IsConnected` → 转发"。查不到或未连接时统一返回 `CameraResult.Fail(-1, "Camera not open or found")`。
 
@@ -77,11 +78,13 @@
 
 `OpenCamera` **不幂等**：若注册表中已有该 key 且实例 `IsConnected`，直接返回 `CameraResult.Fail(-1, "The camera has been opened")`。内部竞争路径做了完整清理：新建实例若 `TryRegister` 失败（其它服务实例抢先注册）则 `Close`+`Dispose` 候选实例并改用已注册实例；`Connect()` 失败且本次是本方法注册的实例，则 `cameraManager.Remove(cameraKey)` 让后续重试不被残留实例阻塞。
 
-`StartGrab` 幂等：已在取流直接返回 `CameraResult.Success(0)`；异常路径会先 `SafeStopGrab` 补偿再返回 `Fail(-2, e.Message)`。`StopGrab` 也幂等，且调用后额外校验 `camera.IsGrabbing`：若仍为取流状态则返回 `Fail(-1, camera.LastError ?? "Camera stop grabbing failed")`，不伪装成已停止。
+`StartGrab` 幂等：已在取流直接返回 `CameraResult.Success(0)`；异常路径会先 `SafeStopGrab` 补偿再返回 `Fail(-2, e.Message)`。`StopGrab` 也幂等，且调用后额外校验 `camera.IsGrabbing`：若仍为取流状态则返回 `Fail(-1, camera.LastError ?? "Camera stop grabbing failed")`，不伪装成已停止。1.2.0 起 `StopGrab` 对"已注册但未连接（掉线）"的相机同样交给相机层处理（相机层幂等，掉线后返回成功），仅"未注册的 key"仍返回 `Fail(-1, "Camera not open or found")`。
+
+**掉线与重连（1.2.0）**：掉线相机保持注册（不可用）。`OpenCamera` 对已注册的 key 是**重连**：`camera.IsConnected` 为 false 时直接 `Connect()`，相机内部释放旧句柄并由 `deviceFactory` 重建；沿用注册时的设备信息（设备 IP 变化时应先 `Close(key)` 再用新 `info` 打开）。`Close(key)` 对掉线相机同样走 `CameraManager.Remove`，成功释放（关闭过程中掉线同样按释放成功处理；释放后再次 `Close` 幂等成功）。
 
 `SetTrigger` 语义链：停流 → 校验确实停了 → `SetEnumParam("TriggerMode", "On"/"Off")` → `SetEnumParam("TriggerSource", triggerSource)`。**设置成功不代表在取流**，调用方必须重新 `StartGrab`。
 
-`Close` 只移除并释放相机，**不触碰帧流**——重开同名 key 后原订阅自动继续生效。返回 `CameraResult` 的映射来自 `ICameraManager.Remove`：`Removed → Success(0)`、`NotFound → Fail(-1, "Camera not open or found")`、`ReleaseFailed → Fail(-1, LastError ?? "Dispose camera error")`。注意"释放失败"也仍会调用 `Dispose`，以保证资源不被拖延。
+`Close` 只移除并释放相机，**不触碰帧流**——重开同名 key 后原订阅自动继续生效。返回 `CameraResult` 的映射来自 `ICameraManager.Remove`：`Removed → Success(0)`、`NotFound → Fail(-1, "Camera not open or found")`、`ReleaseFailed → Fail(-1, "The camera has been removed from the registry and released, but the release reported errors: {LastError}")`（1.1.2 起的文案，明确相机已不在注册表中）。注意"释放失败"也仍会调用 `Dispose`，以保证资源不被拖延。
 
 **章节来源**
 - [Junevy.EasyCamera/Common/CameraService.cs](file://Junevy.EasyCamera/Common/CameraService.cs)
@@ -94,8 +97,8 @@
 1. `info == null` 或 `SerialNumber` 为空 → `Unknown`。
 2. `IsSerialConnected(info.SerialNumber)` → `Connected`。必须先判，因为独占模式下本进程自己就会让可达性检查失败。
 3. 注入的 provider 是 `ILinkStatusProbeProvider` 且**确有厂商能探测这台相机** → 调它做非侵入探测，**返回值（含厂商如实报告的 `Unknown`）即为最终结论**；探测抛异常（除 `OperationCanceledException`）一律当"无此能力"，继续回退。
-   > [!note] "确有厂商能探测"如何判定：DI/Builder 注入的恒为 `AggregateCameraProvider`，它自身实现了 `ILinkStatusProbeProvider`，仅凭该接口无法区分"没有任何厂商具备探测能力（或具备能力的厂商都不支持这台相机）"与"厂商如实判定不了"。`TryProbeByVendor` 因此额外询问 internal 接口 `IProbeAvailability.CanProbe(info)`：为 `false`（无人能探测）→ 返回 `null` → 走第 4 步的侵入式回退；为 `true` 才调用探测并采信其结果。该询问与探测调用同处 `try`，`Supports` 抛异常同样降级回退。此处 2026-10-06 前曾是缺口（聚合层的 `Unknown` 被当终态、永不回退），修复机制见 [[公共契约/能力接口与扩展点]]，记录见 [[变更与决策/审查与修复记录]]。
-4. 回退侵入式探测（provider 未实现能力、聚合层无人能探测、或厂商探测抛异常时到达）：以临时 key 前缀 `"probe:"` + 序列号打开相机，成功即 `Idle` 并立即 `Close`、失败按 `Occupied` 保守表达；`finally` 中必定 `cameraManager.Remove(probeKey)` 与 `streamManager.RemoveStream(probeKey)`，探测连接不留在注册表。
+   > [!note] 聚合层的 `Unknown` 为什么回退（1.1.2 起）：DI/Builder 注入的恒为 `AggregateCameraProvider`，它实现 `ILinkStatusProbeProvider`；无厂商具备能力时它返回 `Unknown`，能力厂商判定不了时也返回 `Unknown`。`TryProbeByVendor` 对两者统一返回 `null`，走第 4 步的侵入式回退（`Unknown` 不再被当作终态）。该调用同处 `try`，厂商抛异常同样降级回退。1.1.2 之前 `Unknown` 被当终态，生产组合下回退不可达；见 [[公共契约/能力接口与扩展点]]，记录见 [[变更与决策/审查与修复记录]]。
+4. 回退侵入式探测（provider 未实现能力、聚合层无人能探测、厂商探测抛异常、或厂商返回 `Unknown`（1.1.2 起视为回退信号）时到达）：以临时 key 前缀 `"probe:"` + 序列号打开相机，成功即 `Idle` 并立即 `Close`、失败按 `Occupied` 保守表达；`finally` 中必定 `cameraManager.Remove(probeKey)` 与 `streamManager.RemoveStream(probeKey)`，探测连接不留在注册表。
 
 > [!warning] 回退路径会真的打开/关闭相机，且临时占用 per-key 锁。`ProbeCameraLinkStatus` 契约注释要求"在后台线程调用"，不要放在 UI 线程轮询。`CancellationToken` 只在步骤之间检查，厂商调用本身不可中途取消。
 

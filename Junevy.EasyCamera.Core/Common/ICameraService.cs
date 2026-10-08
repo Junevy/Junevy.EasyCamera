@@ -235,5 +235,12 @@ namespace Junevy.EasyCamera.Core.Common
         /// 帧流统计；相机未打开、从未订阅或流管理器已释放时返回 <see cref="FrameStreamStatistics.Empty" />
         /// </returns>
         FrameStreamStatistics GetStreamStatistics(string cameraKey);
+
+        /// <summary>
+        /// 相机掉线通知（相机支持 <see cref="Abstractions.IConnectionMonitor" /> 时转发）。
+        /// 事件在线程池线程上触发，处理程序不得假定 UI 线程；参数的 <see cref="Abstractions.CameraDisconnectedEventArgs.CameraKey" />
+        /// 为掉线相机的操作 Key。掉线后相机仍保持注册（不可用），可对同一 key 再次 <see cref="OpenCamera" /> 重连。
+        /// </summary>
+        event EventHandler<CameraDisconnectedEventArgs> CameraDisconnected;
     }
 }

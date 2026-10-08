@@ -13,7 +13,7 @@
 		<!-- 开启生成时自动打包 -->
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<PackageId>Junevy.EasyCamera.Core</PackageId>
-		<Version>1.1.1</Version>
+		<Version>1.2.0</Version>
 		<Authors>Junevy</Authors>
 		<Company>Junevy</Company>
 		<Description>

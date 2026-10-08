@@ -12,8 +12,9 @@ namespace Junevy.EasyCamera.Common
     /// </summary>
     /// <remarks>
     /// 厂商独有能力按"能力接口"探测（<see cref="ILinkStatusProbeProvider" />）：
-    /// 没有厂商具备该能力时返回 <see cref="CameraLinkStatus.Unknown" />，
-    /// 由调用方决定回退策略，新增厂商无需改动本类。
+    /// 没有厂商具备该能力时返回 <see cref="CameraLinkStatus.Unknown" />。
+    /// <see cref="CameraService" /> 把 <c>Unknown</c> 视作回退信号，改走侵入式探测；
+    /// 新增厂商无需改动本类。
     /// </remarks>
     public sealed class AggregateCameraProvider : ICameraProvider, ILinkStatusProbeProvider
     {
@@ -95,7 +96,8 @@ namespace Junevy.EasyCamera.Common
         /// <summary>
         /// 探测指定相机的链路状态：按厂商支持关系分发到第一个具备
         /// <see cref="ILinkStatusProbeProvider" /> 能力的厂商提供器。
-        /// 没有厂商具备该能力时返回 <see cref="CameraLinkStatus.Unknown"/>，由调用方决定回退策略
+        /// 没有厂商具备该能力时返回 <see cref="CameraLinkStatus.Unknown"/>；
+        /// <see cref="CameraService" /> 会把 Unknown 视作回退信号，改走侵入式探测
         /// </summary>
         /// <param name="info">相机信息</param>
         /// <param name="cancellationToken">取消令牌</param>

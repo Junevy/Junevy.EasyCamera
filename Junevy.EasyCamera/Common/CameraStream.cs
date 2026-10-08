@@ -291,6 +291,11 @@ namespace Junevy.EasyCamera.Common
             }
             finally
             {
+                // 第一步必须是关闭写入端：之后发布方的 TryWrite 返回 false 并自行归还引用。
+                // 若先排空再等待移除订阅者，两步之间仍有发布线程可能成功入队一帧，而无人再消费它，
+                // 原生缓冲只能等终结器回收。TryComplete 幂等，正常取消路径上是无副作用的空操作。
+                channel.Writer.TryComplete();
+
                 while (channel.Reader.TryRead(out var leftover))
                     DisposeFrame(leftover, whenException);
 

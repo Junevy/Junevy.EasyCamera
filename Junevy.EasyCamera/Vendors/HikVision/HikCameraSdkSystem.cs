@@ -1,6 +1,7 @@
 using Junevy.EasyCamera.Core.Abstractions;
 using MvCameraControl;
 using System;
+using System.Diagnostics;
 using System.Threading;
 
 namespace Junevy.EasyCamera.Vendors.HikVision
@@ -55,17 +56,25 @@ namespace Junevy.EasyCamera.Vendors.HikVision
 
                 lock (refCountLock)
                 {
-                    if (Interlocked.Increment(ref initRefCount) == 1)
+                    if (++initRefCount == 1)
                     {
+                        int code;
                         try
                         {
-                            SdkInitializeAction();
+                            code = SdkInitializeAction();
                         }
                         catch
                         {
-                            // 初始化失败时回退引用计数，避免留下无法释放的悬挂引用
-                            Interlocked.Decrement(ref initRefCount);
+                            // 初始化异常时回退引用计数，避免留下无法释放的悬挂引用
+                            --initRefCount;
                             throw;
+                        }
+
+                        if (code != MvError.MV_OK)
+                        {
+                            // SDK 返回错误码同样回退引用计数；本实例不持有引用（initialized 保持 false）
+                            --initRefCount;
+                            throw new InvalidOperationException($"HikVision SDK initialize failed with error code 0x{code:X8}.");
                         }
                     }
                 }
@@ -85,13 +94,24 @@ namespace Junevy.EasyCamera.Vendors.HikVision
                 if (!this.initialized)
                     return;
 
-                lock (refCountLock)
+                try
                 {
-                    if (Interlocked.Decrement(ref initRefCount) == 0)
-                        SdkFinalizeAction();
+                    lock (refCountLock)
+                    {
+                        // 计数先于 Finalize 递减：Finalize 抛异常时引用也已归还，不能再次递减
+                        if (--initRefCount == 0)
+                        {
+                            var code = SdkFinalizeAction();
+                            if (code != MvError.MV_OK)
+                                Trace.TraceWarning($"HikVision SDK finalize returned error code 0x{code:X8}.");
+                        }
+                    }
                 }
-
-                this.initialized = false;
+                finally
+                {
+                    // 无论 Finalize 是否抛出，本实例都已不再持有引用，必须清除标记，防止下次 Release 二次递减
+                    this.initialized = false;
+                }
             }
         }
 

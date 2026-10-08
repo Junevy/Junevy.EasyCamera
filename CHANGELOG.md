@@ -1,5 +1,53 @@
 # CHANGELOG
 
+## 2026-10-08（1.2.0：设备掉线检测与通知）
+
+依据 `docs/superpowers/plans/2026-10-08-device-disconnect-handling.md`（审查 2026-10-08 第 2 项）。**新增公共 API**（`ICameraService` 新增事件），版本 1.2.0；不做门面层自动重连。
+
+- **问题**：海康 `IDevice.DeviceExceptionEvent`（`DisConnect`）从未订阅。拔线后相机状态停在 `Grabbing`；门面 `StopGrab` 因"未连接"直接失败；对同 key 再次 `OpenCamera` 会在仍打开的句柄上再次 `Open()`；直接 `ICamera.Close()` 时 `StopGrabbing` 失败进入回滚，可能永远关不掉；订阅者收不到任何通知。
+- **设计**：
+  - `HikCamera` 新增生命周期状态 `Lost`（设备已掉线）。`IsConnected`/`IsGrabbing` 为 false，帧回调不再发布，但到达的帧仍归还 SDK 缓冲区。
+  - 设备异常回调在 SDK 线程运行，**不进入 `operationGate`**：只在 `stateLock` 内做 `Open/Grabbing/Closing → Lost` 的条件迁移并记录原因；仅 `Open/Grabbing` 时事件在线程池上异步派发（`Closing` 期间的掉线只改状态，不派发），处理程序异常被吞掉，回调内任何异常不外泄。同一次连接最多通知一次。
+  - 掉线后 `StopGrab` 尽力调用原生停流并返回成功（掉线原因保留在 `LastError`）；`Close` 走释放路径（`TearDownLostDevice`：解绑 → 尽力停流 → 等待在途回调 → 尽力关闭/销毁句柄 → 清空引用），返回成功；`Connect` 先释放旧句柄再由 `deviceFactory` 重建。
+  - **验收修正（2026-10-09）**：`CloseCore` 判定顺序改为 Disposed → 失败；**状态 Closed → 幂等成功**（不论 `device` 是否为 null，不做原生调用，清空 `LastError`）；状态 Lost → `TearDownLostDevice()`；之后才是 `device == null` → `Camera not initialized`（基本不可达，仅作防御）。`TearDownLostDevice` 结束于 `Closed`，释放后的二次 `Close` 幂等成功。设备异常回调在关闭期间保持绑定，仅在原生关闭成功后才解绑；关闭期间的掉线迁为 `Lost`（不派发事件）；关闭失败的回滚 `RestoreAfterFailedClose` 在 `stateLock` 内发现已为 `Lost` 时改走 `TearDownLostDevice()` 并返回其结果，不回滚到 `Open/Grabbing`（判定与恢复在锁内完成，释放路径在锁外执行，因其会等待在途回调）。
+  - 新增能力接口 `IConnectionMonitor`（`Disconnected` 事件，ISP，不改 `ICamera`）与事件参数 `CameraDisconnectedEventArgs`（`CameraKey`/`SerialNumber`/`Reason`/`OccurredAtUtc`，`WithCameraKey` 复制填充门面 Key）。
+  - 门面 `CameraService`：新建并注册相机后，若实现 `IConnectionMonitor` 则订阅一次并转发为 `CameraDisconnected`（填充 `CameraKey`）；单个订阅者异常被吞掉，不影响其他订阅者。
+  - 门面 `StopGrab(key)`：相机存在即调用 `camera.StopGrab()`（相机层幂等），不再以"未连接"拒绝；未注册的 key 仍返回失败。
+  - **手动重连**：掉线后对同一 key 再次 `OpenCamera` 即重连（相机复用注册实例，沿用注册时的设备信息）；若设备 IP/枚举信息已变化，先 `Close(key)` 再用新的 `info` 打开。重连后需重新 `StartGrab`；帧流订阅保留，无需重订。
+- **测试**（新增 16 项，全部在既有测试文件中，未新增测试文件；验收修正后 `HikCameraStateTests` 另有 1 项改名、4 项新增）：
+  - `HikCameraStateTests`：`Disconnect_WhileGrabbing_MarksLostAndNotifiesOnce`（状态/原因/2 秒内派发/连续两次只通知一次）、`Disconnect_WhileGrabbing_FrameCallbackStopsPublishingButReturnsBuffer`、`StopGrab_AfterDisconnect_ReturnsSuccessAndAttemptsNativeStop`、`Close_AfterDisconnect_ReleasesDeviceAndReturnsSuccess`、`Connect_AfterDisconnect_RebuildsDeviceHandleAndGrabs`、`DeviceException_AfterCloseOrDispose_RaisesNoNotification`、`Disconnected_HandlerException_DoesNotBreakCloseOrReconnect`、`DeviceException_WhileDisposeWaitsForInFlightCallback_DoesNotDeadlock`（守卫：掉线回调不得进入门，否则与持门等待在途回调的 `Dispose` 死锁）。
+  - `CameraManagerServiceRegressionTests`：`CameraService_CameraDisconnected_ForwardsCameraKey`、`CameraService_CameraDisconnected_SubscriberException_DoesNotStopOtherSubscribers`、`CameraService_StopGrab_DisconnectedButRegistered_ReturnsSuccess`、`CameraService_OpenCamera_AfterDisconnect_ReconnectsSameKeyWithoutNewCamera`。
+  - 验收修正新增（`HikCameraStateTests`，4 项）：`Close_AfterDisconnect_CalledTwice_BothSucceedAndReleaseOnce`（掉线 → Close → Close，两次都成功、句柄只释放一次）、`Facade_ReconnectFailsWhenFactoryThrows_CloseByKeyStillRemovesCamera`（重连时工厂抛异常 → Connect 失败 → 门面 `Close(key)` 返回成功并移除相机）、`Close_WhenDisconnectedDuringStopGrab_ReleasesDeviceAndReturnsSuccess`（停流期间掉线 → Close 成功、设备已释放、无 Disconnected、之后可重连）、`Close_WhenDisconnectedDuringNativeClose_ReleasesDeviceAndReturnsSuccess`（原生关闭期间掉线并返回失败 → 同上）。改名：`Close_WhenNeverConnected_StillReportsNotInitialized` → `Close_WhenNeverConnected_IsIdempotentSuccess`（断言成功且未创建原生句柄）。
+- **偏离计划与实现细节**（第 4、5 项已按验收意见修正，第 1 项已接受）：
+  1. **SDK 构造函数非公开**：计划假定 `DeviceExceptionArgs(DeviceExceptionType)` 为公开构造函数，实际 `MvCameraControl.Net.dll`（4.5.0.2）中为 `internal`。测试经反射调用 SDK 自身的构造函数（`CreateDisconnectArgs`）；生产代码只读取 `MsgType`，不受影响。
+  2. **状态迁移与掉线迁移互斥**：计划只要求掉线处理在 `stateLock` 内改状态，但门内的 `Open→Grabbing`、`Grabbing→Open`、`Open/Grabbing→Closing` 同样会与之竞争（否则可能把刚写入的 `Lost` 覆盖回 `Grabbing`/`Open`）。因此 `SetState` 与新增的 `TryMoveState` 均在 `stateLock` 内完成判定与写入，且诊断清空与迁移在同一临界区完成。
+  3. `ConnectCore` 将 `SetLastError(null)` 提前到进入 `Open` 之前，避免清空刚由掉线处理写入的原因。
+  4. **（已修正，验收意见）释放后的 Close 语义**：原计划让 `TearDownLostDevice` 置空句柄并回到 `Closed`，导致此后 `Close` 报 `Camera not initialized`，与"曾打开过则幂等成功"的契约冲突，门面 `Close(key)` 也可能因此报 `ReleaseFailed`。按验收意见采用更简单的方案（不引入"曾打开过"之类的并行标志）：`CloseCore` 对 `Closed` 状态无论 `device` 是否为空都幂等成功，`Camera not initialized` 仅作防御保留。这是**有意的语义变化**：`ICamera.Close` 对从未打开过的相机也幂等成功（`CameraManager.DisposeCamera` 对 Connect 失败的候选会先调用 `Close`，旧语义会制造假的 `ReleaseFailed`）。
+  5. **（已修正，验收意见）关闭期间掉线**：计划规定 `Closing` 下忽略掉线事件，若设备恰在关闭过程中掉线、原生关闭失败，回滚后相机会长期显示为已连接。按验收意见修正：`Closing` 期间的掉线迁为 `Lost` 且不派发事件；关闭失败的回滚若发现已为 `Lost`，改走 `TearDownLostDevice()` 并返回成功；原生关闭成功则由 `Closed` 覆盖 `Lost`。
+- **升级说明**：
+  - `ICameraService` 新增 `CameraDisconnected` 事件；**自行实现该接口的消费方需补充该成员**（`CameraService` 已实现）。
+  - 门面 `StopGrab` 对"已注册但未连接"的相机由失败改为调用相机层（成功）；依赖旧失败语义的调用方需复核。
+  - `ICamera.Close` 对从未打开的相机幂等成功（此前报 `Camera not initialized`）：这是有意的语义变化。经门面 `Close(key)` 的调用无感知（门面只移除已注册相机）；直接使用厂商相机对象的代码若依赖旧失败语义需复核。
+  - 掉线相机保持注册，`Close(key)` 仍是释放它的唯一入口；`OpenCamera` 对同 key 为重连，不是新建。
+  - 版本递增到 1.2.0：两个类库 csproj 的 `<Version>` 与各自 `AssemblyInfo.cs` 的 `AssemblyVersion/AssemblyFileVersion`（1.2.0.0）同步。NuGet 按 `id + version` 缓存，若本机曾用同号本地构建过 1.2.0，需清理缓存。
+- **验收**：`dotnet build`（sln，Release，`--no-incremental`）0 错误 0 警告；`dotnet test` net48 149/149、net8.0 149/149（`[TestMethod]` 总数 149 = 执行数）；`--no-build` 连续 5 轮全部通过。
+
+## 2026-10-08（1.1.2：审查修复批次 A）
+
+依据 `docs/superpowers/plans/2026-10-08-review-batch-a-fix.md`（审查 2026-10-08 第 1/3/4/5/6/7 项）。行为修正，**无破坏性 API 变更**。
+
+- **任务 1：`HikCamera.IsConnected` 改为纯状态读取，原生检查只在守卫内**。问题：`IsConnected` 在 `operationGate` 外读 `device` 并调用原生 `IsConnected`，与 `DisposeCore` 并发会 NRE，或对已销毁句柄做原生调用；门面参数方法（不持 key 锁）会触发该竞态。修法：公开属性只读状态（`Open/Grabbing/Closing`），不读 `device`、不做原生调用；新增门内私有 `IsDeviceReady()`（状态 Open/Grabbing + 局部快照 `device.IsConnected`），`CheckReady`、`CurrentParameters`、`SetEnumParam`、`ExecuteCommand`、`TryGetParam`、`TryGetEnumParam`、`StartGrabCore` 改用它；`ConnectCore` 的"已打开"判断改为状态判断；`IBufferConfigurable.SetBufferCount` 整体入门，门内写 `bufferCount`，非 Open/Grabbing 时只记录。顺手修正 `StopGrabCore` 中两条语句挤一行的排版。测试：`HikCameraStateTests.IsConnected_IsPureStateRead_NeverCallsNativeDevice`、`IsConnectedAndParamAccess_RacingDispose_NeverThrow`（200 轮并发）。**注意**：公开 `IsConnected` 不再反映物理掉线，由计划 B（1.2.0，`Lost` 状态）补齐。
+- **任务 3：`EasyCameraBuilder` 重复启用同一厂商去重**。问题：重复 `EnableHikVision()` 追加两份提供器与两个 SDK 系统，枚举结果重复，与 `Build()` 注释"去重为单实例语义"矛盾。修法：`enabledVendors` 集合（`StringComparer.Ordinal`），重复调用直接返回；新增 `internal EnabledVendorCount`。测试：`EasyCameraBuilderTests.EnableHikVision_CalledTwice_RegistersSingleVendor`。
+- **任务 4：聚合提供器返回 `Unknown` 时回退侵入式探测**。问题：生产环境 provider 恒为 `AggregateCameraProvider`，无厂商具备能力时它返回 `Unknown`，`TryProbeByVendor` 把它当作有效结果返回，`ProbeByOpenClose` 永远不可达。修法：`TryProbeByVendor` 中厂商返回 `Unknown` 时返回 `null`；`AggregateCameraProvider` 的 XML 注释说明门面把 `Unknown` 视作回退信号。测试：`CameraServiceProbeTests.Probe_AggregateWithoutCapability_UnknownFallsBackToInvasiveProbe`（断言 `Idle`、`CreateCount == 1`，注册表与 `probe:SN-001` 帧流均已清理）。
+- **任务 5：订阅者异常终止后的帧滞留窗口**。问题：`ConsumeAsync` 的 `finally` 先排空通道，再经 `RemoveDeadSubscriber` 移除订阅者；两步之间发布线程仍可 `TryWrite` 成功，帧无人消费，原生缓冲只能等终结器回收。修法：`finally` 第一步 `channel.Writer.TryComplete()`，之后发布方 `TryWrite` 返回 false 并自行归还引用；正常取消路径上幂等、无副作用。测试：`CameraStreamRegressionTests.DeadSubscriber_FramesPublishedAroundWorkerDeath_AreAllReleased`。
+- **任务 6：`HikCamera.Close()` 在 Closed 状态幂等**。问题：状态已是 Closed 时再次 `Close` 仍调用原生 `Close`，大概率失败并进入回滚，`CameraManager.Remove` 因此报 `ReleaseFailed`，而相机实际已移除释放。修法：`CloseCore` 在 `device == null` 判断之后，状态 Closed 时直接返回成功、不做原生调用；从未 Connect 过的相机仍报 `Camera not initialized`。`CameraService.Close` 的 `ReleaseFailed` 消息改为"The camera has been removed from the registry and released, but the release reported errors: {LastError}"。测试：`HikCameraStateTests.Close_WhenAlreadyClosed_IsIdempotentWithoutNativeClose`、`Close_WhenNeverConnected_StillReportsNotInitialized`。
+- **任务 7：`HikCameraSdkSystem` 检查 SDK 返回码，Release 异常不致计数错乱**。问题：`Initialize` 忽略 `SdkInitializeAction` 的返回码，初始化失败被当作成功；`Release` 中 `initialized = false` 位于 Finalize 之后，Finalize 抛异常时下次 `Release` 会二次递减全局计数。修法：返回码非 `MV_OK` 时回退引用计数并抛 `InvalidOperationException("HikVision SDK initialize failed with error code 0x…")`，`initialized` 保持 false；`Release` 中计数先递减，`initialized = false` 放进 `finally`；Finalize 返回非 `MV_OK` 时 `Trace.TraceWarning`（不抛）；锁内计数改为普通 `++/--`。测试：`HikCameraSdkSystemTests.Initialize_WhenSdkReturnsError_ThrowsAndRollsBackReference`、`Release_WhenSdkFinalizeThrows_RethrowsOnceAndKeepsCountBalanced`。
+- **测试替身修正**：`HikCameraSdkSystemTests`、`EasyCameraBuilderTests` 的 SDK seam 原先返回计数值（会被当作错误码），现返回 `MV_OK`；状态测试的 `FakeDevice` 增加 `IsConnectedCalls`、`CloseCalls` 计数。
+- **偏离计划的一处**：任务 6 的幂等短路置于 `device == null` 判断**之后**（计划原文写在其之前）。原因：计划同一条测试要求"未 Connect 过的相机 `Close` 仍报 `Camera not initialized`"，两者只能取其一。
+- **版本递增到 1.1.2**：两个类库 csproj 的 `<Version>` 与各自 `AssemblyInfo.cs` 的 `AssemblyVersion/AssemblyFileVersion`（1.1.2.0）同步。NuGet 按 `id + version` 缓存；若本机曾用同号本地构建过 1.1.2，需清理缓存。
+- **修复前后对照**（工作树未动：把 `HEAD` 源码导出到临时目录，叠加本批次测试后运行）：`IsConnected_IsPureStateRead…`、`Close_WhenAlreadyClosed…`、两个 SDK 用例、`EnableHikVision_CalledTwice…`、`Probe_AggregateWithoutCapability…` 失败；`DeadSubscriber…` 本次运行失败（概率性）；`IsConnectedAndParamAccess…` 通过（窗口极窄，是守卫而非确定性复现）；`Close_WhenNeverConnected…` 通过（行为保持）。
+- **验收**：`dotnet build`（sln，Release，`--no-incremental`）0 错误 0 警告；`dotnet test` net48 133/133、net8.0 133/133（`[TestMethod]` 总数 133 = 执行数，较 1.1.1 的 124 新增 9 项）；连续 6 轮重复运行结果一致。
+
 ## 2026-10-06（1.1.1：厂商 SDK 托管封装随包分发——修复消费方必崩）
 
 起因：第三方程序崩溃，排障结论为"nupkg 未声明厂商 SDK 依赖"。**经端到端复现属实**，但根因与修法均需修正，详见 `docs/代码审查报告-2026-10-06.md` 第五节。

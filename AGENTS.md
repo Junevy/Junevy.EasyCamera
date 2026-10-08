@@ -41,14 +41,16 @@ HikVision 与公共层的资源所有权约束：SDK 回调帧必须在回调内
 并发纪律（2026-10-06 审查后确立，新增厂商必须遵守）：
 
 - **一切原生访问必须经厂商相机的 `operationGate`**（海康 `ExecuteGuarded`/`TryExecuteGuarded`/`ExecuteDispose` 三个守卫收敛：互斥 + 异常翻译成 `CameraResult` + `LastError` 诊断）。唯一例外是 SDK 采集回调线程，它只读状态并归还缓冲区。
-- **生命周期用单一状态枚举表达**（海康 `CameraState`：`Closed/Open/Grabbing/Closing/Disposed`），不得再引入并行布尔标志位；`Publish` 判定只看状态。任何失败路径（含原生异常）必须回滚到进入前的状态，否则会出现"连接还在但一帧不发"的静默丢帧。
+- **生命周期用单一状态枚举表达**（海康 `CameraState`：`Closed/Open/Grabbing/Closing/Disposed/Lost`），不得再引入并行布尔标志位；`Publish` 判定只看状态。任何失败路径（含原生异常）必须回滚到进入前的状态，否则会出现"连接还在但一帧不发"的静默丢帧。
 - **门面按 cameraKey 串行**：`CameraService` 的 `OpenCamera/Close/StartGrab/StopGrab/SetTrigger` 全部走同一把 `GetKeyLock(cameraKey)`；新增写操作必须并入，否则会重现 use-after-free 竞态。
 - **`CameraStream.operationLock` 只保护订阅者注册表**：`AddRef`/`TryWrite`/背压淘汰/帧释放/用户异常回调一律在锁外执行。
 - **`SupportedOSPlatform("windows")` 必须写在 `Properties/PlatformCompatibility.cs`**（`#if NET8_0_OR_GREATER`）：两个类库都设了 `GenerateAssemblyInfo=false`，csproj 的 `<AssemblyAttribute>` 项会被连带跳过，平台标注静默失效。
+- **`IsConnected` 是纯状态读取**（1.1.2）：`state ∈ {Open, Grabbing, Closing}`，不读 `device`、不做原生调用，可在任意线程（含与 `Dispose` 并发时）调用。原生连接检查只能在 `operationGate` 内经 `IsDeviceReady()`（状态 Open/Grabbing + 局部快照 `device.IsConnected`）完成；`CheckReady`、`CurrentParameters`、参数与命令路径、`StartGrabCore` 均走它。
+- **`DeviceExceptionEvent` 回调与帧回调一样运行在 SDK 线程，不得进入 `operationGate`**（1.2.0）：只在 `stateLock` 内做 `Open/Grabbing/Closing → Lost` 的条件迁移并记录原因；仅 `Open/Grabbing` 时事件才在线程池上异步派发（`Closing` 期间的掉线只改状态），吞掉处理程序异常；关闭期间设备异常回调保持绑定，原生关闭成功后才解绑；关闭失败的回滚（`RestoreAfterFailedClose`）在锁内发现已为 `Lost` 时改走释放路径，不回滚到 `Open/Grabbing`；门内的状态迁移（`SetState`/`TryMoveState`）同样在 `stateLock` 内完成，与之互斥。
 
 公共契约要点（2026-10-06 审查修复后，v1.1.0）：
 
-- **能力接口（ISP）**：厂商独有能力一律用独立接口表达，不得再加进基础接口——`ILinkStatusProbeProvider`（可达性探测）、`IBufferConfigurable`（采集缓冲配置）、`INamedCameraInfo`（本地改名）。`ICameraProvider` 只保留所有厂商都必须支持的枚举/创建/分发。加新能力时新增接口，而不是新增成员。
+- **能力接口（ISP）**：厂商独有能力一律用独立接口表达，不得再加进基础接口——`ILinkStatusProbeProvider`（可达性探测）、`IBufferConfigurable`（采集缓冲配置）、`INamedCameraInfo`（本地改名）、`IConnectionMonitor`（掉线通知，1.2.0）。`ICameraProvider` 只保留所有厂商都必须支持的枚举/创建/分发。加新能力时新增接口，而不是新增成员。
 - `CameraInterfaceType`（原 `CameraType`）表示设备物理接口类型（GigE/USB/CameraLink/GenTL），与品牌无关；枚举成员为 `All`（非 `ALL`）。
 - `CameraLinkStatus` 五态且**默认值必须是 `Unknown`**：`Unknown=0`（未能判定）、`Connected=1`、`Idle=2`、`Occupied=3`（在线但被独占）、`Unreachable=4`（枚举不到/掉线）。禁止把任何"确定状态"排到 0。
 - 帧流订阅者为 `CameraStreamSubscriber`（原 `CameraStreamSuber`），订阅参数名 `subscriberKey`（服务层与流层已统一）；同 Key 重复订阅为**原子替换**语义。
@@ -62,6 +64,9 @@ HikVision 与公共层的资源所有权约束：SDK 回调帧必须在回调内
 - 项目入口文档为根目录 `README.md`（现状/快速上手/推荐用法/链路状态）。
 - 面向消费方 Agent 的包使用说明书位于 `skills/using-junevy-easycamera/SKILL.md`（可复制到任意 Agent 运行时的技能目录使用）；修改公共 API 后必须同步更新该文件。
 - **IRayple 按"继续保留"处理**：类型仍标记 `[Obsolete("未开发完毕", true)]`、`EnableIRayple` 仍抛 `NotImplementedException`，代码保留但必须与海康遵守同一套并发纪律（已补齐 `operationGate`、回调排空、attach 幂等、`LastError`）。
+- **`Close` 在 Closed 状态幂等**（1.1.2；1.2.0 扩展到从未打开的相机）：海康相机处于 Closed 状态（已关闭，或从未打开过）时再次 `Close` 直接成功，不做原生调用、不依赖 `device` 是否为 null，避免二次原生关闭失败误入回滚导致 `CameraManager.Remove` 报 `ReleaseFailed`。`CameraManager.DisposeCamera` 会对 Connect 失败的候选先调 `Close`，因此从未 `Connect` 过的相机同样返回成功（`ICamera.Close` 幂等语义，1.2.0 的有意变化）；`device == null` 时的 `Camera not initialized` 仅作防御保留。Disposed 状态仍报失败。
+- **厂商 `Unknown` 是回退信号**（1.1.2）：`CameraService` 把 `ILinkStatusProbeProvider` 返回的 `CameraLinkStatus.Unknown` 视作"无法判定"，回退侵入式探测（`probe:{serial}`），不把它当作结论返回。`AggregateCameraProvider` 在无厂商具备能力时即返回 `Unknown`，因此生产路径依赖这一回退。
+- **SDK 初始化返回码必须检查**（1.1.2）：`HikCameraSdkSystem.Initialize` 的原生返回码非 `MV_OK` 时回退引用计数并抛 `InvalidOperationException`，实例不持有引用。`Release` 中计数先于 Finalize 递减，`initialized` 在 `finally` 中清除，Finalize 抛异常不会二次递减；Finalize 返回非 `MV_OK` 只 `Trace.TraceWarning`，不抛。
 
 测试工程约定：测试项目 `EnableDefaultCompileItems=false` + 显式 `Compile` 清单——**新增测试文件必须手工加入 csproj，否则不会被编译、更不会执行**（2026-10-06 曾因此让 6 个测试"绿色地缺席"）。验收时应核对"仓库内 `[TestMethod]` 总数 == 执行数"。包内容守卫（`PackageContentTests`）在找不到 nupkg 时断言为 Inconclusive，不产生假失败。
 
@@ -72,14 +77,14 @@ dotnet build .\Junevy.EasyCamera.sln -c Release -v:minimal --no-incremental
 dotnet test .\Junevy.EasyCamera.Tests\Junevy.EasyCamera.Tests.csproj -c Release --logger "console;verbosity=minimal"
 ```
 
-验收基线（2026-10-06）：全量重建 0 错误 0 警告；net48 与 net8.0 各 124/124 通过。
+验收基线（2026-10-09，1.2.0 验收修正后）：全量重建 0 错误 0 警告；net48 与 net8.0 各 149/149 通过（仓库 `[TestMethod]` 总数 149 = 执行数；1.1.2 时为 133/133；2026-10-06 时为 124/124）。
 
 ## 5. 知识库
 
-本库的 Obsidian 知识库位于 `D:\Desktop\doc\ObsidianDocs\Junevy.EasyCamera`（独立 git 仓库），入口 `知识库首页.md`，正文在 `zh/content/<主题>/`。用普通文件工具按路径访问（Read/Grep/Glob、shell），不要依赖 filesystem MCP：`@modelcontextprotocol/server-filesystem` 在客户端支持 roots 时会把允许目录替换成当前工作目录。
+本库的 Obsidian 知识库位于仓库内 `Junevy.EasyCamera.Wiki/`（随本仓库提交），入口 `知识库首页.md`，正文在 `zh/content/<主题>/`。用普通文件工具按路径访问（Read/Grep/Glob、shell），不要依赖 filesystem MCP：`@modelcontextprotocol/server-filesystem` 在客户端支持 roots 时会把允许目录替换成当前工作目录。
 
-- **开发前**：按 `知识库首页.md` 的"按场景找笔记"读取相关笔记；改并发/资源代码前必读 `并发与资源/并发纪律`，改动对照 `Agent协作/文档同步清单与任务配方`。
+- **按需检索**：不在会话开始时通读首页或章节。先用 Grep 搜整个库目录（类型/方法名或主题词）定位笔记，再只读命中段落；定位不到时才看 `知识库首页.md` 的"按场景找笔记"。改并发/资源代码前必读 `并发与资源/并发纪律`，改动对照 `Agent协作/文档同步清单与任务配方`。
 - **改完后，同一会话内回写**：公共 API/契约、并发纪律、打包规则、厂商适配或设计决策变化时，更新对应笔记（优先改已有笔记；新增笔记挂进 `知识库首页.md` 分类索引），并更新首页"版本与时效"中的版本号。与本文件第 3 节"同步 Skill / CHANGELOG / AGENTS.md"一起完成。
-- **不自行提交**：写完运行 `git -C <知识库路径> status --short` 与 `git -C <知识库路径> diff --stat`，把结果放进汇报，由用户决定提交；代为提交时提交信息写明对应的代码改动或版本号。
+- **不自行提交**：写完运行 `git status --short -- Junevy.EasyCamera.Wiki` 与 `git diff --stat -- Junevy.EasyCamera.Wiki`，把结果放进汇报，由用户决定提交；代为提交时提交信息写明对应的代码改动或版本号。
 - 权威顺序：代码 > 本文件 > `CHANGELOG.md` > `docs/` 审查报告 > 知识库笔记正文。
 - 消费方（如 AutomationSystem）的会话只读本知识库；它们发现的不一致会在汇报中指出，由本仓库会话核实后修正。

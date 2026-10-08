@@ -185,6 +185,30 @@ namespace Junevy.EasyCamera.Tests.Common
             Assert.AreEqual(1, capable.ProbeCalls);
         }
 
+        [TestMethod]
+        public void Probe_AggregateWithoutCapability_UnknownFallsBackToInvasiveProbe()
+        {
+            // 生产环境 provider 恒为 AggregateCameraProvider：它总实现 ILinkStatusProbeProvider，
+            // 无厂商具备能力时返回 Unknown。门面必须把 Unknown 视作回退信号，改走侵入式探测，
+            // 而不是把 Unknown 当作探测结论返回（否则回退路径永远不可达）。
+            var vendor = new FakeVendorProvider("V1", new[] { "SN-001" });
+            var aggregate = new Junevy.EasyCamera.Common.AggregateCameraProvider(new IVendorCameraProvider[] { vendor });
+            var manager = new CameraManager();
+            var streams = new StreamManager();
+            var service = new CameraService(aggregate, manager, streams);
+
+            Assert.AreEqual(
+                CameraLinkStatus.Idle,
+                service.ProbeCameraLinkStatus(new FakeCameraInfo { SerialNumber = "SN-001" }));
+            Assert.AreEqual(1, vendor.CreateCount, "侵入式回退必须真正尝试打开一次相机");
+
+            // 探测连接与探测帧流都不得残留
+            Assert.IsFalse(manager.TryGet("probe:SN-001", out _), "探测连接不得残留在注册表中");
+            Assert.IsFalse(streams.GetStream("probe:SN-001", out _), "探测帧流不得残留");
+
+            streams.Dispose();
+        }
+
         private sealed class ProbeCapableVendorProvider : IVendorCameraProvider, ILinkStatusProbeProvider
         {
             public string VendorName => "ProbeVendor";

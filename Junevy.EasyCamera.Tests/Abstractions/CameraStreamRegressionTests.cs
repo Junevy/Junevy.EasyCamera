@@ -4,6 +4,7 @@ using Junevy.EasyCamera.Tests.Mocks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -141,6 +142,34 @@ namespace Junevy.EasyCamera.Tests.Abstractions
             var frame = new MockFrame();
             stream.Publish(frame);
             Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref callbacks) == 1, 5000));
+        }
+
+        [TestMethod]
+        public void DeadSubscriber_FramesPublishedAroundWorkerDeath_AreAllReleased()
+        {
+            // 订阅者首帧即抛异常且不提供 whenException：worker 终止，随后被移除。
+            // 发布线程持续发布直到死订阅者消失，覆盖"终止前、排空中、移除前"的全部窗口：
+            // 任何成功入队的帧都必须被消费或释放，不得滞留在无人读取的通道中。
+            using var stream = new CameraStream("SN001");
+            stream.Subscribe("dead", 4, (_, _) => throw new InvalidOperationException("handler failed"));
+
+            var frames = new List<MockFrame>();
+            var publisher = Task.Run(() =>
+            {
+                // 至少 500 帧；之后若死订阅者仍在则继续发布（5000 帧上限，防止缺陷下挂死）
+                for (var i = 0; i < 5000 && (i < 500 || stream.SubscriberCount > 0); i++)
+                {
+                    var frame = new MockFrame();
+                    frames.Add(frame);
+                    stream.Publish(frame);
+                    Thread.Yield();
+                }
+            });
+
+            Assert.IsTrue(publisher.Wait(TimeSpan.FromSeconds(5)), "发布线程必须在 5 秒内完成");
+            Assert.AreEqual(0, stream.SubscriberCount, "死订阅者必须被移除");
+            Assert.IsTrue(frames.Count >= 500, "必须覆盖足够多的发布");
+            Assert.IsTrue(frames.All(f => f.IsDisposed), "worker 终止前后发布的每一帧都必须被释放");
         }
     }
 }

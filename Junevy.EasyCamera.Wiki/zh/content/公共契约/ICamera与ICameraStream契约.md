@@ -23,11 +23,11 @@
 
 | 成员 | 说明 |
 | --- | --- |
-| `bool IsConnected` | 是否已打开 |
+| `bool IsConnected` | 是否已打开（纯状态读取：不读设备、不做原生调用，1.1.2 起；原生连接检查只在门内经 `IsDeviceReady()`） |
 | `bool IsGrabbing` | 是否正在取流 |
 | `string LastError` | 最近一次无法用返回值表达的生命周期错误（如停止取流失败）；成功完成后清空 |
 | `CameraResult Connect()` | 打开 |
-| `CameraResult Close()` | 关闭 |
+| `CameraResult Close()` | 关闭（幂等：已关闭或从未打开的相机返回成功，不做原生调用；1.2.0 验收修正起；掉线后的相机释放句柄并返回成功，关闭期间掉线同样如此） |
 | `CameraResult StartGrab()` | 开始取流 |
 | `CameraResult StopGrab()` | 停止取流；**1.1.0 起由 `void` 改为返回 `CameraResult`** |
 | `string GetSerialNumber()` | 未知时返回空字符串 |

@@ -207,6 +207,84 @@ namespace Junevy.EasyCamera.Tests.Common
             Assert.IsFalse(startTask.Result.IsSuccess, "相机已关闭后 StartGrab 必须失败而不是拿到已释放实例");
         }
 
+        [TestMethod]
+        public void CameraService_CameraDisconnected_ForwardsCameraKey()
+        {
+            var provider = new TrackingProvider();
+            var manager = new CameraManager();
+            using var streams = new StreamManager();
+            var service = new CameraService(provider, manager, streams);
+            CameraDisconnectedEventArgs received = null;
+            service.CameraDisconnected += (_, e) => received = e;
+
+            Assert.IsTrue(service.OpenCamera(new MockCameraInfo { SerialNumber = "SN001" }, "cam1").IsSuccess);
+            Assert.IsTrue(provider.CreatedCameras.TryPeek(out var camera));
+
+            camera.RaiseDisconnected();
+
+            Assert.IsNotNull(received, "门面必须转发相机的掉线事件");
+            Assert.AreEqual("cam1", received.CameraKey, "门面事件必须带上操作 Key");
+            Assert.AreEqual("SN001", received.SerialNumber);
+            StringAssert.Contains(received.Reason, "disconnected");
+            Assert.IsTrue(manager.TryGet("cam1", out _), "掉线后相机仍保持注册，便于重连");
+        }
+
+        [TestMethod]
+        public void CameraService_CameraDisconnected_SubscriberException_DoesNotStopOtherSubscribers()
+        {
+            var provider = new TrackingProvider();
+            var manager = new CameraManager();
+            using var streams = new StreamManager();
+            var service = new CameraService(provider, manager, streams);
+            string notifiedKey = null;
+            service.CameraDisconnected += (_, _) => throw new InvalidOperationException("subscriber failure");
+            service.CameraDisconnected += (_, e) => notifiedKey = e.CameraKey;
+
+            Assert.IsTrue(service.OpenCamera(new MockCameraInfo { SerialNumber = "SN001" }, "cam1").IsSuccess);
+            Assert.IsTrue(provider.CreatedCameras.TryPeek(out var camera));
+
+            camera.RaiseDisconnected();
+
+            Assert.AreEqual("cam1", notifiedKey, "单个订阅者的异常不得影响其他订阅者，也不得外泄到相机派发线程");
+        }
+
+        [TestMethod]
+        public void CameraService_StopGrab_DisconnectedButRegistered_ReturnsSuccess()
+        {
+            var provider = new TrackingProvider();
+            var manager = new CameraManager();
+            using var streams = new StreamManager();
+            var service = new CameraService(provider, manager, streams);
+
+            Assert.IsTrue(service.OpenCamera(new MockCameraInfo { SerialNumber = "SN001" }, "cam1").IsSuccess);
+            Assert.IsTrue(provider.CreatedCameras.TryPeek(out var camera));
+            camera.RaiseDisconnected();
+
+            var result = service.StopGrab("cam1");
+
+            Assert.IsTrue(result.IsSuccess, "相机已注册但掉线时，门面停流必须交给相机层并返回成功");
+            Assert.IsFalse(service.StopGrab("missing-key").IsSuccess, "未注册的 key 仍必须返回失败");
+        }
+
+        [TestMethod]
+        public void CameraService_OpenCamera_AfterDisconnect_ReconnectsSameKeyWithoutNewCamera()
+        {
+            var provider = new TrackingProvider();
+            var manager = new CameraManager();
+            using var streams = new StreamManager();
+            var service = new CameraService(provider, manager, streams);
+
+            Assert.IsTrue(service.OpenCamera(new MockCameraInfo { SerialNumber = "SN001" }, "cam1").IsSuccess);
+            Assert.IsTrue(provider.CreatedCameras.TryPeek(out var camera));
+            camera.RaiseDisconnected();
+
+            var reopened = service.OpenCamera(new MockCameraInfo { SerialNumber = "SN001" }, "cam1");
+
+            Assert.IsTrue(reopened.IsSuccess, "掉线后对同一 key 再次 OpenCamera 即为重连");
+            Assert.IsTrue(camera.IsConnected);
+            Assert.AreEqual(1, provider.CreatedCameras.Count, "重连复用已注册的相机实例，不新建相机");
+        }
+
         private sealed class DisposingStreamManager : IStreamManager
         {
             public ICameraStream GetOrCreateStream(string userDefinedName) => throw new ObjectDisposedException(nameof(StreamManager));
@@ -368,7 +446,7 @@ namespace Junevy.EasyCamera.Tests.Common
             public IEnumerable<ICameraInfo> Enumerate(CameraInterfaceType type) => Array.Empty<ICameraInfo>();
         }
 
-        private sealed class TrackingCamera : ICamera
+        private sealed class TrackingCamera : ICamera, IConnectionMonitor
         {
             public CameraResult ConnectResult { get; set; } = CameraResult.Success(0);
             public CameraResult CloseResult { get; set; } = CameraResult.Success(0);
@@ -379,6 +457,16 @@ namespace Junevy.EasyCamera.Tests.Common
             public bool IsGrabbing { get; private set; }
             public bool IsDisposed { get; private set; }
             public string LastError { get; set; }
+
+            public event EventHandler<CameraDisconnectedEventArgs> Disconnected;
+
+            /// <summary>模拟掉线（与 HikCamera 的 Lost 语义一致：不再连接、不再取流，并同步触发掉线事件）</summary>
+            public void RaiseDisconnected()
+            {
+                this.IsConnected = false;
+                this.IsGrabbing = false;
+                this.Disconnected?.Invoke(this, new CameraDisconnectedEventArgs("SN001", "Device disconnected (MsgType=DisConnect)", DateTime.UtcNow));
+            }
 
             public SemaphoreSlim ConnectGate { get; set; }
             public TaskCompletionSource<object> ConnectEntered { get; set; }

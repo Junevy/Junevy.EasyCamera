@@ -38,7 +38,7 @@ namespace Junevy.EasyCamera.Core.Abstractions
         CameraResult Connect();
 
         /// <summary>
-        /// 关闭Camera
+        /// 关闭Camera（幂等：已关闭或从未打开的相机应返回成功；掉线后的相机应释放并返回成功）
         /// </summary>
         /// <returns>
         /// <see cref="CameraResult" />

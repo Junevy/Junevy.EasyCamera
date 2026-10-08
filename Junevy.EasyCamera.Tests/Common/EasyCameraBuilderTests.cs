@@ -1,6 +1,7 @@
 using Junevy.EasyCamera.Core.Abstractions;
 using Junevy.EasyCamera.Vendors.HikVision;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using MvCameraControl;
 using System;
 using System.Threading;
 
@@ -25,8 +26,17 @@ namespace Junevy.EasyCamera.Tests.Common
             this.finalizeCalls = 0;
             this.originalInitialize = HikCameraSdkSystem.SdkInitializeAction;
             this.originalFinalize = HikCameraSdkSystem.SdkFinalizeAction;
-            HikCameraSdkSystem.SdkInitializeAction = () => Interlocked.Increment(ref this.initCalls);
-            HikCameraSdkSystem.SdkFinalizeAction = () => Interlocked.Increment(ref this.finalizeCalls);
+            // 桩返回 MV_OK：seam 返回值即 SDK 错误码，计数值不能被当作错误码
+            HikCameraSdkSystem.SdkInitializeAction = () =>
+            {
+                Interlocked.Increment(ref this.initCalls);
+                return MvError.MV_OK;
+            };
+            HikCameraSdkSystem.SdkFinalizeAction = () =>
+            {
+                Interlocked.Increment(ref this.finalizeCalls);
+                return MvError.MV_OK;
+            };
         }
 
         [TestCleanup]
@@ -110,6 +120,21 @@ namespace Junevy.EasyCamera.Tests.Common
 
             Assert.AreNotSame(first.Service, second.Service, "每次 Create 必须是独立的相机栈");
             Assert.AreNotSame(first.Sdk, second.Sdk);
+        }
+
+        [TestMethod]
+        public void EnableHikVision_CalledTwice_RegistersSingleVendor()
+        {
+            // 重复启用同一厂商必须去重：否则会追加两个提供器与两个 SDK 系统，枚举结果重复
+            var builder = EasyCamera.CreateBuilder().EnableHikVision().EnableHikVision();
+
+            Assert.AreEqual(1, builder.EnabledVendorCount, "同一厂商重复启用必须去重为单实例语义");
+
+            var host = builder.Build();
+            Assert.AreEqual(0, this.initCalls, "Build 不得触碰 SDK");
+
+            host.Dispose();
+            Assert.AreEqual(0, this.finalizeCalls, "未 Initialize 的宿主释放时不得触发 SDK Finalize");
         }
     }
 }

@@ -78,7 +78,7 @@ SDK 空操作这一点是**刻意**的：`IRaypleCameraSdkSystem` 存在的唯�
 | 项 | 现状 | 收尾方向 |
 | --- | --- | --- |
 | 参数写入路径未纳入 `operationGate` | `SetParam`×4 / `SetEnumParam` / `ExecuteCommand` / `TryGetParam` / `TryGetEnumParam` 直接调 `this.camera.*`，与 `Dispose` 并发有 NRE 风险 | 照海康收敛到统一守卫，异常翻译成 `CameraResult` |
-| 无 `ILinkStatusProbeProvider` 实现 | provider 只实现 `IVendorCameraProvider`（`IBufferConfigurable` 在相机侧、`INamedCameraInfo` 在 info 侧已实现）。经聚合层后，对 IRayple 相机"没有厂商能探测"（`IProbeAvailability.CanProbe=false`），门面会回退到侵入式 `probe:{serial}` 探测（2026-10-06 修复前这里是 `Unknown` 且不回退，见 [[公共契约/能力接口与扩展点]]）。目前 IRayple 本身不可启用，该路径仅在补齐后生效 | SDK 若提供可达性查询则实现之（注意不信任传入的原生引用）；不实现则沿用侵入式回退（会短暂 Open/Close） |
+| 无 `ILinkStatusProbeProvider` 实现 | provider 只实现 `IVendorCameraProvider`（`IBufferConfigurable` 在相机侧、`INamedCameraInfo` 在 info 侧已实现）。经聚合层后，对 IRayple 相机"没有厂商能探测"时聚合层返回 `Unknown`，门面会回退到侵入式 `probe:{serial}` 探测（1.1.2 起；1.1.2 之前这里是 `Unknown` 且不回退，见 [[公共契约/能力接口与扩展点]]）。目前 IRayple 本身不可启用，该路径仅在补齐后生效 | SDK 若提供可达性查询则实现之（注意不信任传入的原生引用）；不实现则沿用侵入式回退（会短暂 Open/Close） |
 | 单一状态枚举未落地 | 三个 `int` 标志位组合 | 与海康对齐，规避"标志位组合非法导致静默丢帧" |
 | 元数据未快照 | 每次属性访问都读原生结构 | 构造时快照，消除 check-then-use 竞态 |
 | 无测试覆盖 | `Junevy.EasyCamera.Tests` 中没有 `Vendors/IRayple*` 文件 | 需先给相机加构造 seam（类似海康的 `deviceFactory`）才能无硬件测试 |
